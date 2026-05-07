@@ -10,7 +10,7 @@ import yaml from 'js-yaml';
 hljs.registerLanguage('yaml', yamlLanguage);
 
 function App() {
-  const [pipelineData, setPipelineData] = null; // We'll hold the raw object for the graph
+  const [pipelineData, setPipelineData] = useState(null); // We'll hold the raw object for the graph
   const [pipelineState, setPipelineState] = useState(null);
   const [yamlContent, setYamlContent] = useState('');
   const [copied, setCopied] = useState(false);

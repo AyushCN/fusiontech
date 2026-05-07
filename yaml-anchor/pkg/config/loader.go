@@ -43,7 +43,7 @@ func expandBlueprints(p *schema.Pipeline) error {
 				job.RunsOn = "ubuntu-latest"
 				job.Steps = []schema.Step{
 					{Name: "Checkout Code", Uses: "actions/checkout@v4"},
-					{Name: "Setup Go", Uses: "actions/setup-go@v4", Env: map[string]string{"go-version": "1.21"}},
+					{Name: "Setup Go", Uses: "actions/setup-go@v4", Env: map[string]string{"go-version": "1.26"}},
 					{Name: "Go Build", Run: "go build ./..."},
 					{Name: "Go Test", Run: "go test ./..."},
 				}

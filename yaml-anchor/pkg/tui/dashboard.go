@@ -38,7 +38,7 @@ type DashboardModel struct {
 	currentStep string
 	status      string
 	logs        []string
-	err         error
+	Err         error
 	done        bool
 }
 
@@ -94,7 +94,7 @@ func (m DashboardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.status = msg.Status
 		
 		if msg.Error != nil {
-			m.err = msg.Error
+			m.Err = msg.Error
 			m.done = true
 			return m, tea.Quit
 		}
@@ -118,10 +118,10 @@ func (m DashboardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m DashboardModel) View() string {
-	if m.err != nil {
+	if m.Err != nil {
 		return fmt.Sprintf("\n%s\n%s\n\n", 
 			titleStyle.Render("YamlAnchor Simulation"), 
-			errorStyle.Render(fmt.Sprintf("Pipeline Failed: %v", m.err)))
+			errorStyle.Render(fmt.Sprintf("Pipeline Failed: %v", m.Err)))
 	}
 
 	if m.done {

@@ -56,6 +56,16 @@ func RunLocal(ctx context.Context, pipeline *schema.Pipeline, updates chan<- Upd
 		send(UpdateMsg{JobName: jobName, Status: "running", Step: "Initializing Container"})
 
 		image := resolveImage(job)
+		
+		// Blueprint expansion
+		if job.Blueprint == "go-app" {
+			job.Steps = append([]schema.Step{
+				{Name: "Go Dependencies", Run: "go mod download"},
+				{Name: "Go Build", Run: "go build ./..."},
+				{Name: "Go Test", Run: "go test -v ./..."},
+			}, job.Steps...)
+		}
+
 		container := client.Container().
 			From(image).
 			WithMountedDirectory("/src", hostDir).
@@ -152,10 +162,10 @@ func RunLocal(ctx context.Context, pipeline *schema.Pipeline, updates chan<- Upd
 func resolveImage(job schema.Job) string {
 	switch job.RunsOn {
 	case "ubuntu-latest", "ubuntu-22.04":
-		// Check if any step uses Go or Node
+		// Check if any step uses Go — prefer a Go image for better compatibility
 		for _, step := range job.Steps {
-			if strings.Contains(step.Run, "go ") || strings.Contains(step.Uses, "setup-go") {
-				return "golang:1.21"
+			if strings.Contains(step.Run, "go ") || strings.Contains(step.Run, "go\t") || strings.Contains(step.Uses, "setup-go") {
+				return "golang:1.26"
 			}
 			if strings.Contains(step.Run, "npm ") || strings.Contains(step.Uses, "setup-node") {
 				return "node:18"

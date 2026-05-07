@@ -28,15 +28,19 @@ YamlAnchor is a developer tool that treats CI/CD pipelines as Type-Safe Code rat
     *   Implemented concurrent updates via Go channels from the Dagger engine to the UI.
     *   Added visual components such as spinners, color-coded success/failure tags, and a localized log feed.
 
-### ✅ Phase 4: Security & Maintenance (Challenges)
+### ✅ Phase 4: Security & Maintenance
 *   **Status**: Completed
 *   **Features Implemented**:
-    *   **Secret Scanner (`pkg/scanner/secrets.go`)**: Built an automated step to block YAML generation if any hardcoded secrets (AWS keys, GitHub tokens, etc.) are detected in the code logic.
-    *   **Docker Cleanup (`anchor clean`)**: Created a command that interacts with Docker to safely prune dangling containers and build caches to prevent system bloat.
+    *   **Secret Scanner (`pkg/scanner/secrets.go`)**: Built an automated step to block YAML generation if hardcoded secrets are detected.
+    *   **Docker Cleanup (`anchor clean`)**: Created a command to prune dangling containers and caches.
 
-### ✅ Phase 5: Architectural Overhaul (Backend & UI)
+### ✅ Phase 5: Blueprints & Production Readiness
 *   **Status**: Completed
 *   **Features Implemented**:
+    *   **Pipeline Blueprints**: Added "Go-App" templates to eliminate boilerplate in config files.
+    *   **Dynamic Image Resolution**: Engine now auto-detects required Go/Node versions to match `go.mod`.
+    *   **Environment Injection**: Full support for step-level `env:` variables in local simulation.
+    *   **Comprehensive Testing**: Added 10+ unit tests covering YAML export, secret scanning, and schema validation.
     *   **DAG Validation**: Upgraded schema validation with compile-time cycle detection and dependency guarantees (`Needs` array).
     *   **Blueprints Abstraction**: Introduced high-level blueprints (e.g., `go-app`) that auto-expand into underlying GitHub Action steps.
     *   **Action Shims**: Replaced blind skipping of `uses` steps with intelligent simulated shims in Dagger (e.g., intercepting `actions/checkout` and `actions/setup-*`).

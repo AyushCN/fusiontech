@@ -38,8 +38,15 @@ live execution logs to the Pulse interactive dashboard.`,
 		// Start Bubbletea TUI
 		m := tui.NewDashboard(updates)
 		p := tea.NewProgram(m, tea.WithAltScreen())
-		if _, err := p.Run(); err != nil {
+		finalM, err := p.Run()
+		if err != nil {
 			fmt.Printf("Error running dashboard: %v\n", err)
+			os.Exit(1)
+		}
+
+		finalModel := finalM.(tui.DashboardModel)
+		if finalModel.Err != nil {
+			fmt.Printf("\n[YAML-ANCHOR ERROR] Simulation failed:\n%v\n", finalModel.Err)
 			os.Exit(1)
 		}
 	},
