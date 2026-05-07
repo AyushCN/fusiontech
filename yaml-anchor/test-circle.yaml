@@ -1,0 +1,16 @@
+name: "Circular Dependency Test"
+
+jobs:
+  job-a:
+    runs-on: ubuntu-latest
+    needs: [job-b]
+    steps:
+      - name: "Echo A"
+        run: "echo A"
+
+  job-b:
+    runs-on: ubuntu-latest
+    needs: [job-a]
+    steps:
+      - name: "Echo B"
+        run: "echo B"

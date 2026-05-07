@@ -1,23 +1,67 @@
 import React, { useState, useEffect } from 'react';
-import PipelineBuilder from './components/PipelineBuilder';
-import { Download, Copy, Check, Anchor, Terminal } from 'lucide-react';
+import AIGenerator from './components/AIGenerator';
+import VisualGraph from './components/VisualGraph';
+import { Anchor, Download, Copy, Check, FileCode2 } from 'lucide-react';
 import hljs from 'highlight.js/lib/core';
-import yaml from 'highlight.js/lib/languages/yaml';
-import 'highlight.js/styles/github-dark.css';
+import yamlLanguage from 'highlight.js/lib/languages/yaml';
+import 'highlight.js/styles/atom-one-dark-reasonable.css'; // Fits the terminal theme better
+import yaml from 'js-yaml';
 
-hljs.registerLanguage('yaml', yaml);
+hljs.registerLanguage('yaml', yamlLanguage);
 
 function App() {
+  const [pipelineData, setPipelineData] = null; // We'll hold the raw object for the graph
+  const [pipelineState, setPipelineState] = useState(null);
   const [yamlContent, setYamlContent] = useState('');
   const [copied, setCopied] = useState(false);
 
+  // Convert pipeline object to YAML string whenever it changes
+  useEffect(() => {
+    if (!pipelineState) return;
+    
+    // Format to match YamlAnchor spec
+    const yamlObj = {
+      name: pipelineState.name,
+      on: pipelineState.on,
+      jobs: {}
+    };
+
+    if (pipelineState.jobs) {
+      pipelineState.jobs.forEach(job => {
+        yamlObj.jobs[job.id] = {
+          'runs-on': job.runsOn,
+          steps: job.steps.map(step => {
+            const s = { name: step.name };
+            if (step.uses) s.uses = step.uses;
+            if (step.run) s.run = step.run;
+            return s;
+          })
+        };
+      });
+    }
+
+    try {
+      const yamlStr = yaml.dump(yamlObj, { lineWidth: -1 });
+      setYamlContent(yamlStr);
+    } catch (e) {
+      console.error('Failed to generate YAML', e);
+    }
+  }, [pipelineState]);
+
+  // Syntax highlighting effect
   useEffect(() => {
     if (yamlContent) {
       document.querySelectorAll('pre code').forEach((block) => {
+        // highlight.js modifies DOM, we must re-apply or it loses formatting
+        block.removeAttribute('data-highlighted');
         hljs.highlightElement(block);
       });
     }
   }, [yamlContent]);
+
+  const handlePipelineGenerated = (newPipeline) => {
+    setPipelineState(newPipeline);
+  };
 
   const handleCopy = () => {
     navigator.clipboard.writeText(yamlContent);
@@ -30,7 +74,7 @@ function App() {
     const file = new Blob([yamlContent], {type: 'text/yaml'});
     element.href = URL.createObjectURL(file);
     element.download = "anchor.yaml";
-    document.body.appendChild(element); // Required for this to work in FireFox
+    document.body.appendChild(element); 
     element.click();
     document.body.removeChild(element);
   };
@@ -39,43 +83,55 @@ function App() {
     <div className="app-container">
       <header className="header">
         <div className="logo-container">
-          <Anchor className="logo-icon" size={32} />
-          <h1>YamlAnchor Studio</h1>
+          <Anchor className="logo-icon" size={28} />
+          <h1>YamlAnchor <span style={{ color: 'var(--accent-green)' }}>Studio</span></h1>
         </div>
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-          <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
-            Design CI/CD visually.
-          </span>
+        <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>
+          AI_ENGINE: SIMULATED | STATUS: ONLINE
         </div>
       </header>
 
-      <PipelineBuilder onYamlChange={setYamlContent} />
+      <main className="workspace">
+        {/* Left Panel: Mock AI Generator */}
+        <AIGenerator onPipelineGenerated={handlePipelineGenerated} />
 
-      <div className="preview-section glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column' }}>
-        <div className="section-header" style={{ justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Terminal size={20} color="var(--accent-primary)" />
-            Generated anchor.yaml
+        {/* Middle Panel: YAML Output */}
+        <div className="panel">
+          <div className="panel-header">
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+              <FileCode2 size={16} />
+              Generated YAML
+            </div>
+            {yamlContent && (
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button className="btn" onClick={handleCopy} style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}>
+                  {copied ? <Check size={14} color="var(--accent-green)" /> : <Copy size={14} />}
+                  {copied ? 'COPIED' : 'COPY'}
+                </button>
+                <button className="btn btn-ai" onClick={handleDownload} style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}>
+                  <Download size={14} /> DL
+                </button>
+              </div>
+            )}
           </div>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button className="btn" onClick={handleCopy}>
-              {copied ? <Check size={16} color="var(--success)" /> : <Copy size={16} />}
-              {copied ? 'Copied!' : 'Copy'}
-            </button>
-            <button className="btn btn-primary" onClick={handleDownload}>
-              <Download size={16} /> Download
-            </button>
+          <div className="panel-content" style={{ background: '#0d1117' }}>
+            {yamlContent ? (
+              <pre style={{ margin: 0, padding: '1rem', minHeight: '100%' }}>
+                <code className="language-yaml" style={{ background: 'transparent', padding: 0 }}>
+                  {yamlContent}
+                </code>
+              </pre>
+            ) : (
+              <div style={{ padding: '2rem', color: 'var(--text-secondary)', textAlign: 'center', opacity: 0.5 }}>
+                // Output will appear here
+              </div>
+            )}
           </div>
         </div>
-        
-        <div className="code-preview" style={{ flex: 1, margin: 0 }}>
-          <pre style={{ margin: 0, height: '100%' }}>
-            <code className="language-yaml" style={{ background: 'transparent', padding: 0 }}>
-              {yamlContent || '# Start building your pipeline to see the output here...'}
-            </code>
-          </pre>
-        </div>
-      </div>
+
+        {/* Right Panel: Visual Graph & Fault Detection */}
+        <VisualGraph pipeline={pipelineState} />
+      </main>
     </div>
   );
 }

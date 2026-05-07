@@ -23,8 +23,10 @@ type PullRequestTrigger struct {
 
 // Job represents a single job in the workflow.
 type Job struct {
-	RunsOn string `yaml:"runs-on"`
-	Steps  []Step `yaml:"steps"`
+	Blueprint string   `yaml:"blueprint,omitempty"`
+	Needs     []string `yaml:"needs,omitempty"`
+	RunsOn    string   `yaml:"runs-on"`
+	Steps     []Step   `yaml:"steps"`
 }
 
 // Step represents a single step within a job.

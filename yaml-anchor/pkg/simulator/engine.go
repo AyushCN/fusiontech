@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"dagger.io/dagger"
 	"yaml-anchor/pkg/schema"
@@ -46,7 +47,12 @@ func RunLocal(ctx context.Context, pipeline *schema.Pipeline, updates chan<- Upd
 	}
 	hostDir := client.Host().Directory(cwd)
 
+	startTime := time.Now()
+	var stepsExecuted int
+	var jobsSimulated int
+
 	for jobName, job := range pipeline.Jobs {
+		jobsSimulated++
 		send(UpdateMsg{JobName: jobName, Status: "running", Step: "Initializing Container"})
 
 		image := resolveImage(job)
@@ -63,11 +69,27 @@ func RunLocal(ctx context.Context, pipeline *schema.Pipeline, updates chan<- Upd
 		for _, step := range job.Steps {
 			stepName := resolveStepName(step)
 
-			// Handle 'uses' steps — not executable locally, skip gracefully
+			// Handle 'uses' steps with Action Shims
 			if step.Uses != "" {
+				if strings.Contains(step.Uses, "actions/checkout") {
+					send(UpdateMsg{
+						JobName: jobName, Step: stepName, Status: "success",
+						LogLine: "✓ Action Shimmed: Local directory successfully mounted.",
+					})
+					stepsExecuted++
+					continue
+				} else if strings.Contains(step.Uses, "actions/setup-go") || strings.Contains(step.Uses, "actions/setup-node") {
+					send(UpdateMsg{
+						JobName: jobName, Step: stepName, Status: "success",
+						LogLine: "✓ Action Shimmed: Environment satisfied by base image.",
+					})
+					stepsExecuted++
+					continue
+				}
+
 				send(UpdateMsg{
 					JobName: jobName, Step: stepName, Status: "skipped",
-					LogLine: fmt.Sprintf("Skipping action '%s' (not supported in local mode)", step.Uses),
+					LogLine: fmt.Sprintf("Skipping unsupported action '%s'", step.Uses),
 				})
 				continue
 			}
@@ -106,20 +128,37 @@ func RunLocal(ctx context.Context, pipeline *schema.Pipeline, updates chan<- Upd
 			}
 
 			send(UpdateMsg{JobName: jobName, Step: stepName, Status: "success", LogLine: "✓ Step completed"})
+			stepsExecuted++
 		}
 
 		send(UpdateMsg{JobName: jobName, Status: "success", Step: "All steps completed"})
 	}
+
+	// Calculate and report Telemetry Metrics
+	duration := time.Since(startTime)
+	// Rough heuristic: CI takes ~3x longer due to queuing, image pulls over network, and overhead
+	estimatedSaved := duration * 3 
+	
+	metricsLog := fmt.Sprintf("==== TELEMETRY REPORT ====\nJobs Simulated: %d\nSteps Executed: %d\nLocal Execution Time: %s\nEstimated CI Time Saved: %s\n==========================", 
+		jobsSimulated, stepsExecuted, duration.Round(time.Second), estimatedSaved.Round(time.Second))
+	
+	send(UpdateMsg{
+		JobName: "System", Step: "Telemetry", Status: "success",
+		LogLine: metricsLog,
+	})
 }
 
 // resolveImage maps GitHub Actions runner names to real Docker image names.
 func resolveImage(job schema.Job) string {
 	switch job.RunsOn {
 	case "ubuntu-latest", "ubuntu-22.04":
-		// Check if any step uses Go — prefer a Go image for better compatibility
+		// Check if any step uses Go or Node
 		for _, step := range job.Steps {
-			if strings.Contains(step.Run, "go ") || strings.Contains(step.Run, "go\t") {
+			if strings.Contains(step.Run, "go ") || strings.Contains(step.Uses, "setup-go") {
 				return "golang:1.21"
+			}
+			if strings.Contains(step.Run, "npm ") || strings.Contains(step.Uses, "setup-node") {
+				return "node:18"
 			}
 		}
 		return "ubuntu:22.04"

@@ -1,0 +1,6 @@
+name: "Blueprint Test"
+
+jobs:
+  main-app:
+    blueprint: "go-app"
+    runs-on: ubuntu-latest
