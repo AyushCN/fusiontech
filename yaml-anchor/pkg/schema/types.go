@@ -18,6 +18,7 @@ type Pipeline struct {
 // Job represents a workflow job
 type Job struct {
 	Name         string                 `yaml:"name,omitempty" json:"name,omitempty"`
+	Blueprint    string                 `yaml:"blueprint,omitempty" json:"blueprint,omitempty"`
 	RunsOn       string                 `yaml:"runs-on" json:"runs_on"`
 	Environment  string                 `yaml:"environment,omitempty" json:"environment,omitempty"`
 	Concurrency  interface{}            `yaml:"concurrency,omitempty" json:"concurrency,omitempty"`
@@ -45,7 +46,7 @@ type Step struct {
 	If       string                 `yaml:"if,omitempty" json:"if,omitempty"`
 	Timeout  int                    `yaml:"timeout-minutes,omitempty" json:"timeout_minutes,omitempty"`
 	ContinueOnError bool              `yaml:"continue-on-error,omitempty" json:"continue_on_error,omitempty"`
-	Working DirectoryString string                    `yaml:"working-directory,omitempty" json:"working_directory,omitempty"`
+	WorkingDirectory string                    `yaml:"working-directory,omitempty" json:"working_directory,omitempty"`
 }
 
 // Strategy defines matrix and other execution strategies

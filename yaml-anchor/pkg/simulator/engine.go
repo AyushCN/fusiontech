@@ -59,7 +59,7 @@ func RunLocal(ctx context.Context, pipeline *schema.Pipeline, updates chan<- Upd
 		
 		// Blueprint expansion
 		if job.Blueprint == "go-app" {
-			job.Steps = append([]schema.Step{
+			job.Steps = append([]*schema.Step{
 				{Name: "Go Dependencies", Run: "go mod download"},
 				{Name: "Go Build", Run: "go build ./..."},
 				{Name: "Go Test", Run: "go test -v ./..."},
@@ -159,7 +159,7 @@ func RunLocal(ctx context.Context, pipeline *schema.Pipeline, updates chan<- Upd
 }
 
 // resolveImage maps GitHub Actions runner names to real Docker image names.
-func resolveImage(job schema.Job) string {
+func resolveImage(job *schema.Job) string {
 	switch job.RunsOn {
 	case "ubuntu-latest", "ubuntu-22.04":
 		// Check if any step uses Go — prefer a Go image for better compatibility
@@ -180,7 +180,7 @@ func resolveImage(job schema.Job) string {
 }
 
 // resolveStepName returns a display name for a step.
-func resolveStepName(step schema.Step) string {
+func resolveStepName(step *schema.Step) string {
 	if step.Name != "" {
 		return step.Name
 	}

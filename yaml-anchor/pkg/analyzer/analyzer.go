@@ -81,14 +81,14 @@ func analyzeJavaScript(content string) AnalysisResult {
 	}
 
 	// Detect frameworks
-	if strings.Contains(content, "from 'react'") || strings.Contains(content, 'from "react"') {
+	if strings.Contains(content, "from 'react'") || strings.Contains(content, `from "react"`) {
 		result.Framework = "react"
 		result.Suggestions = append(result.Suggestions, "npm install")
 		result.Suggestions = append(result.Suggestions, "npm run lint")
 		result.Suggestions = append(result.Suggestions, "npm run build")
 	}
 
-	if strings.Contains(content, "from 'vue'") || strings.Contains(content, 'from "vue"') {
+	if strings.Contains(content, "from 'vue'") || strings.Contains(content, `from "vue"`) {
 		result.Framework = "vue"
 		result.Suggestions = append(result.Suggestions, "npm ci && npm run build")
 	}

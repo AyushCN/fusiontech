@@ -9,7 +9,6 @@ import (
 
 	"github.com/spf13/cobra"
 	"yaml-anchor/pkg/analyzer"
-	"yaml-anchor/pkg/config"
 	"yaml-anchor/pkg/generator"
 	"yaml-anchor/pkg/schema"
 )

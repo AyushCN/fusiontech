@@ -37,9 +37,9 @@ The "Hard Problems" we faced during development:
 ## 🚀 Improvement Roadmap
 
 ### Phase 1: Robustness (Short Term)
-- [ ] **Real Version Detection**: Parse project manifest files to select the exact Docker tag.
-- [ ] **Enhanced Secret Scanner**: Move beyond regex to entropy-based detection.
-- [ ] **`anchor exec`**: Add a command to drop into an interactive shell inside the simulated runner.
+- [x] **Real Version Detection**: Parse project manifest files to select the exact Docker tag.
+- [x] **Enhanced Secret Scanner**: Move beyond regex to entropy-based detection.
+- [x] **`anchor exec`**: Add a command to drop into an interactive shell inside the simulated runner.
 
 ### Phase 2: Features (Medium Term)
 - [ ] **Action Plugin System**: Allow users to write custom Go/JS shims for their proprietary actions.

@@ -113,8 +113,11 @@ jobs:
 
 | Command | Description |
 |:--- |:--- |
+| `anchor init` | Automatically detect your stack and scaffold a smart `anchor.yaml`. |
+| `anchor scan` | Standalone secret scanner (entropy detection) with git hook support. |
 | `anchor generate` | Validates IR, scans for secrets, and exports `.github/workflows/main.yml`. |
 | `anchor local` | Starts the **Pulse Dashboard** and executes the pipeline in Dagger. |
+| `anchor exec <job>` | Drops into an interactive shell inside a Dagger container configured for the job. |
 | `anchor clean` | Prunes dangling containers and clears the Dagger/Docker cache. |
 
 ### Running the Studio (Web UI)
