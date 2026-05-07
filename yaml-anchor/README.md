@@ -1,208 +1,163 @@
-# YamlAnchor ⚓
+# YamlAnchor ⚓ — The Debugger for CI Pipelines
 
-> **Treat CI/CD pipelines as type-safe code, not indentation-sensitive text.**
+[![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=for-the-badge&logo=go)](https://go.dev/)
+[![Dagger Engine](https://img.shields.io/badge/Engine-Dagger-FF6C37?style=for-the-badge&logo=docker)](https://dagger.io/)
+[![TUI](https://img.shields.io/badge/UI-Bubbletea-ED5282?style=for-the-badge)](https://github.com/charmbracelet/bubbletea)
+[![Web UI](https://img.shields.io/badge/Studio-Vite%20%2B%20React-646CFF?style=for-the-badge&logo=vite)](https://vitejs.dev/)
 
-YamlAnchor eliminates "YAML Hell" in CI/CD workflows. Define your pipeline in a structured `anchor.yaml`, let YamlAnchor validate it with compile-time guarantees (DAG cycle detection, dependency graph checks), generate GitHub Actions YAML, and simulate execution locally in real Docker containers — all before pushing to the cloud.
+**YamlAnchor** is the ultimate developer tool that treats CI/CD pipelines as **Type-Safe Code** rather than Indentation-Sensitive Text. Stop the "Push → Wait → Fail → Cry" loop. YamlAnchor turns invisible remote execution into **Visual Local Execution**, allowing you to pause, inspect, and fix pipeline failures instantly.
 
 ---
 
-## ✨ What Makes This Different
+## ✨ Why YamlAnchor?
 
 | Traditional YAML | YamlAnchor |
-|---|---|
-| Errors discovered after push | Errors caught at load-time |
-| No dependency validation | DAG cycle detection built-in |
-| Manual action configuration | High-level **Blueprints** auto-expand steps |
-| `uses:` steps skipped locally | **Action Shims** simulate common actions |
-| No feedback on savings | **Telemetry** reports CI minutes saved |
-| Config-only workflow | Web UI for visual pipeline design |
+|:--- |:--- |
+| ❌ Errors discovered after push | ✅ Errors caught at compile-time |
+| ❌ No dependency validation | ✅ Built-in DAG cycle detection |
+| ❌ Manual action configuration | ✅ **Blueprints** auto-expand complex steps |
+| ❌ `uses:` steps skipped locally | ✅ **Action Shims** simulate actions in Dagger |
+| ❌ Blind log scrolling | ✅ **Pulse Dashboard** (TUI) for real-time status |
+| ❌ No feedback on savings | ✅ **Telemetry** reports CI minutes/cost saved |
+| ❌ Config-only workflow | ✅ **YamlAnchor Studio** for visual design |
 
 ---
 
-## 🚀 Getting Started
+## 🚀 Core Features
+
+### 1. ⚡ Visual Execution (Pulse Dashboard)
+Powered by **Bubbletea**, YamlAnchor provides a live, interactive TUI. Instead of scrolling terminal text, you see:
+- Real-time job progress with spinners.
+- Color-coded success/failure status.
+- Concurrent step tracking via Go channels.
+- Localized log feeds for the active step.
+
+### 2. 🏗️ High-Level Blueprints
+Stop writing boilerplate. Use **Blueprints** to define common stacks.
+- `blueprint: "go-app"`: Automatically adds checkout, setup-go, build, and test steps.
+- `blueprint: "node-app"`: Handles npm installation and testing with environment detection.
+
+### 3. 🛡️ Action Shims & Local Simulation
+YamlAnchor doesn't just "skip" GitHub Actions. It uses **Action Shims** to intelligently simulate them inside Dagger:
+- `actions/checkout`: Automatically mounts your local workspace.
+- `actions/setup-go`: Detects `go.mod` and resolves the correct Docker image dynamically.
+- Support for step-level `env:` variables and dynamic environment injection.
+
+### 4. 🔗 Intelligent DAG Validation
+The engine builds a mathematical **Directed Acyclic Graph (DAG)** of your pipeline.
+- Catch circular dependencies *before* starting a single container.
+- Guarantee execution order with the `needs:` keyword.
+- Validate job hierarchies at load-time.
+
+### 5. 🔐 Security-First Generation
+The `anchor generate` command includes a built-in **Secret Scanner**.
+- Scans IR for hardcoded AWS keys, GitHub tokens, and Bearer tokens.
+- Blocks YAML generation if leaks are detected, preventing accidental pushes to remote.
+
+### 6. 🎨 YamlAnchor Studio (Web UI)
+A premium, glassmorphic React/Vite web application for visual pipeline management:
+- **Simulated AI Generator**: Describe your stack and generate a config instantly.
+- **Real-time Preview**: Synchronized YAML output with syntax highlighting.
+- **Visual Flowchart**: SVG-based graph showing job dependencies with **active fault detection**.
+
+### 7. 📊 Telemetry & Insights
+Every local run generates a **Telemetry Report**:
+- Actual local execution time vs. Estimated remote CI time.
+- Calculation of total CI minutes saved.
+- Metrics to justify local testing before pushing.
+
+---
+
+## 🛠️ Getting Started
 
 ### Prerequisites
-- [Go 1.21+](https://go.dev/)
-- [Docker](https://www.docker.com/) (running locally)
+- **Go 1.21+**
+- **Docker Desktop** (running locally)
+- **Node.js 18+** (for YamlAnchor Studio)
 
 ### Installation
 
 ```bash
+# Clone the repository
 git clone https://github.com/ayushcn/fusiontech.git
 cd fusiontech/yaml-anchor
+
+# Build the CLI
 go build -o anchor main.go
 sudo mv anchor /usr/local/bin/
 ```
 
 ---
 
-## 🛠️ Defining Your Pipeline
+## 📦 Usage & Commands
 
-### Option 1: Manual Configuration
-
+### Define Your Pipeline (`anchor.yaml`)
 ```yaml
-# anchor.yaml
-name: "CI Pipeline"
-
-on:
-  push:
-    branches: [main]
+name: "Production Pipeline"
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - name: "Checkout Code"
-        uses: "actions/checkout@v4"
-      - name: "Run Tests"
-        run: "go test ./..."
-      - name: "Build Binary"
-        run: "go build -o ./bin/app ./..."
-        env:
-          CGO_ENABLED: "0"
-          GOOS: "linux"
-```
-
-### Option 2: Blueprints (Recommended)
-
-Blueprints let you define a pipeline without knowing the underlying GitHub Action syntax. YamlAnchor expands them into the correct steps automatically.
-
-```yaml
-name: "My Go App"
-
-jobs:
-  build:
-    blueprint: "go-app"   # Expands into: checkout → setup-go → build → test
-```
-
-**Available Blueprints:**
-
-| Blueprint | Expands Into |
-|---|---|
-| `go-app` | checkout → setup-go@v4 → `go build` → `go test` |
-| `node-app` | checkout → setup-node@v3 → `npm ci` → `npm test` |
-
-### Option 3: YamlAnchor Studio (Web UI)
-
-```bash
-cd ui && npm install && npm run dev
-# Open http://localhost:5173
-```
-
-A glassmorphic React web app with:
-- **Simulated AI Generator** — describe your stack, generate a pipeline instantly
-- **Real-time YAML preview** with syntax highlighting
-- **Visual pipeline graph** — SVG flowchart of jobs and steps with live **fault detection**
-
----
-
-## 🔗 Job Dependencies (DAG)
-
-YamlAnchor performs compile-time DAG validation. Circular dependencies are caught before any container is started.
-
-```yaml
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: "Build"
-        run: "go build ./..."
-
+  build-backend:
+    blueprint: "go-app"
+  
   deploy:
-    runs-on: ubuntu-latest
-    needs: [build]          # 'deploy' waits for 'build' to succeed
+    runs-on: "ubuntu-latest"
+    needs: [build-backend]
     steps:
-      - name: "Deploy"
-        run: "echo deploying..."
+      - name: "Deploy to Production"
+        run: "echo 'Deploying to cloud...'"
+        env:
+          STAGE: "prod"
 ```
 
+### CLI Commands
+
+| Command | Description |
+|:--- |:--- |
+| `anchor generate` | Validates IR, scans for secrets, and exports `.github/workflows/main.yml`. |
+| `anchor local` | Starts the **Pulse Dashboard** and executes the pipeline in Dagger. |
+| `anchor clean` | Prunes dangling containers and clears the Dagger/Docker cache. |
+
+### Running the Studio (Web UI)
 ```bash
-# Circular dependency example — caught immediately:
-$ anchor local -c bad-pipeline.yaml
-Failed to load config: circular dependency detected involving job: job-a
+cd ui
+npm install
+npm run dev
 ```
 
 ---
 
-## 📦 Commands
-
-### `anchor generate` — Generate GitHub Actions YAML
-
-```bash
-anchor generate --config anchor.yaml
-```
-
-- Validates pipeline structure and DAG dependencies
-- **Scans for hardcoded secrets** — blocks generation if found
-- Writes `.github/workflows/main.yml`
-
-### `anchor local` — Run Locally with the Pulse TUI
-
-```bash
-anchor local --config anchor.yaml
-```
-
-- Blueprints are expanded before execution
-- Runner names mapped to real images (`ubuntu-latest` → `ubuntu:22.04`, `setup-go` → `golang:1.21`)
-- **Action Shims** for common `uses:` steps (no more silent skips):
-  - `actions/checkout` → shimmed (local directory is already mounted)
-  - `actions/setup-go` / `actions/setup-node` → shimmed via base image selection
-- Real stdout streamed to the **Pulse Dashboard** TUI
-- **Telemetry Report** printed after execution:
-  ```
-  ==== TELEMETRY REPORT ====
-  Jobs Simulated: 1
-  Steps Executed: 3
-  Local Execution Time: 12s
-  Estimated CI Time Saved: 36s
-  ==========================
-  ```
-
-### `anchor clean` — Free Docker/Dagger Cache
-
-```bash
-anchor clean
-```
-
----
-
-## 🔐 Secret Scanner
-
-Blocks `anchor generate` if any step contains:
-
-| Pattern | Example |
-|---|---|
-| AWS Access Key | `AKIA[0-9A-Z]{16}` |
-| GitHub Token | `ghp_...`, `gho_...` |
-| Bearer Token | `Bearer <token>` |
-
----
-
-## 📁 Project Structure
+## 📁 Project Architecture
 
 ```
 yaml-anchor/
-├── anchor.yaml              # Example pipeline definition
-├── test-blueprint.yaml      # Blueprint feature demo
-├── test-circle.yaml         # DAG cycle detection demo
-├── main.go                  # CLI entry point
-├── cmd/
-│   ├── root.go
-│   ├── generate.go          # anchor generate
-│   ├── local.go             # anchor local (with error reporting)
-│   └── clean.go             # anchor clean
+├── cmd/                # CLI implementation (Cobra)
+│   ├── generate.go     # YAML Export + Secret Scanning
+│   ├── local.go        # Dagger Engine + TUI integration
+│   └── clean.go        # Resource management
 ├── pkg/
-│   ├── config/              # Loader, Blueprint expansion, DAG validation
-│   ├── schema/              # Pipeline IR: Pipeline, Job (Needs/Blueprint), Step
-│   ├── generator/           # YAML export
-│   ├── scanner/             # Secret detection
-│   ├── simulator/           # Dagger engine with Action Shims + Telemetry
-│   └── tui/                 # Bubbletea Pulse dashboard
-└── ui/                      # YamlAnchor Studio (React + Vite)
-    └── src/
-        ├── App.jsx           # 3-panel layout
-        ├── components/
-        │   ├── AIGenerator.jsx   # Simulated AI pipeline generator
-        │   └── VisualGraph.jsx   # SVG flowchart + fault detection
-        └── index.css         # Dark terminal aesthetic
+│   ├── schema/         # Type-Safe Pipeline IR (Job, Step, Needs)
+│   ├── config/         # YAML Loader + Blueprint Expansion
+│   ├── simulator/      # Dagger Engine + Action Shims + Telemetry
+│   ├── tui/            # Bubbletea Pulse Dashboard
+│   └── scanner/        # Automated Secret Detection
+└── ui/                 # YamlAnchor Studio (React + Vite)
+    ├── src/components/ # AIGenerator, VisualGraph, YAMLPreview
+    └── src/App.jsx     # Glassmorphic Layout
 ```
+
+---
+
+## 🗺️ Roadmap
+- [x] Type-Safe Go IR
+- [x] Dagger Local Execution
+- [x] Bubbletea TUI Dashboard
+- [x] Action Shims & Blueprints
+- [x] Secret Scanner
+- [x] YamlAnchor Studio (Web UI)
+- [ ] VS Code Extension for live IR validation
+- [ ] Support for GitLab CI and Bitbucket Pipelines
+
+---
+
+Developed with ❤️ for the DevOps community.
+**Stop Pushing. Start Anchoring.** ⚓

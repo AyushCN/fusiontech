@@ -2,27 +2,27 @@ package scanner
 
 import (
 	"fmt"
-	"regexp"
 
 	"yaml-anchor/pkg/schema"
 )
 
-// Common secret patterns
-var secretPatterns = map[string]*regexp.Regexp{
-	"AWS Access Key": regexp.MustCompile(`AKIA[0-9A-Z]{16}`),
-	"GitHub Token":   regexp.MustCompile(`(ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{36}`),
-	"Bearer Token":   regexp.MustCompile(`Bearer [a-zA-Z0-9\-\._~+/]+=*`),
-}
-
 // HasSecret scans the pipeline steps for hardcoded secrets and returns an error if found.
+// This is used during 'anchor generate' to catch secrets in the IR before YAML export.
 func HasSecret(pipeline *schema.Pipeline) error {
 	for jobName, job := range pipeline.Jobs {
 		for i, step := range job.Steps {
-			for secretType, pattern := range secretPatterns {
-				if pattern.MatchString(step.Run) || pattern.MatchString(step.Uses) {
-					return fmt.Errorf("SECURITY RISK: Detected hardcoded %s in Job '%s' (Step %d). Please use injected secrets instead", secretType, jobName, i+1)
+			// Check Run field
+			for name, pattern := range defaultPatterns {
+				if pattern.MatchString(step.Run) {
+					return fmt.Errorf("SECURITY RISK: Detected hardcoded %s in Job '%s' (Step %d, 'run' field). Please use injected secrets instead", name, jobName, i+1)
+				}
+				if pattern.MatchString(step.Uses) {
+					return fmt.Errorf("SECURITY RISK: Detected hardcoded %s in Job '%s' (Step %d, 'uses' field). Please use injected secrets instead", name, jobName, i+1)
 				}
 			}
+			
+			// Optional: We could also run entropy check on the IR here if desired, 
+			// but regex is usually enough for the structured IR.
 		}
 	}
 	return nil
