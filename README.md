@@ -167,10 +167,15 @@ yaml-anchor/
 - [x] Dagger Local Execution
 - [x] Bubbletea TUI Dashboard
 - [x] Action Shims & Blueprints
-- [x] Secret Scanner
-- [x] YamlAnchor Studio (Web UI)
-- [ ] VS Code Extension for live IR validation
-- [ ] Support for GitLab CI and Bitbucket Pipelines
+- [x] Secret Scanner (`anchor scan`)
+- [x] Smart Scaffolding (`anchor init`)
+- [x] Interactive Debug Shell (`anchor exec`)
+- [x] Matrix Build Support
+- [x] Action Plugin System (`.anchor/plugins/`)
+- [x] Financial Cost Dashboard
+- [x] Pattern-based LLM Debugger
+- [x] VS Code Extension Scaffold
+- [x] Cross-Platform Runner Shims (macOS/Windows)
 
 ---
 

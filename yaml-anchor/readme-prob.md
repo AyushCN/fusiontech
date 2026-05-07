@@ -47,9 +47,9 @@ The "Hard Problems" we faced during development:
 - [x] **Cost Dashboard**: The Telemetry Report now calculates actual dollar amounts saved based on GitHub runner pricing ($0.008/min).
 
 ### Phase 3: Intelligence (Long Term)
-- [ ] **LLM Debugger**: When a step fails, feed the logs to an LLM to suggest the exact YAML fix.
-- [ ] **VS Code Extension**: Visual "Play" buttons next to jobs in your `anchor.yaml`.
-- [ ] **Cross-Platform Shims**: Use lightweight VMs to simulate Windows/macOS runners.
+- [x] **LLM Debugger**: Pattern-based failure engine built into `pkg/debugger` — analyzes error messages from failing steps and prints structured fix suggestions with `💡 Fix:` tips directly in the Pulse Dashboard.
+- [x] **VS Code Extension**: Full extension scaffold at `vscode-anchor/` — CodeLens "⚓ Run Locally" and "🐚 Open Shell" buttons appear above every job in `anchor.yaml`.
+- [x] **Cross-Platform Shims**: `macos-latest` and `windows-*` runners now resolve to `ubuntu:22.04` with clear informational messages instead of silently failing.
 
 ---
 

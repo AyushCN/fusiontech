@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"dagger.io/dagger"
+	"yaml-anchor/pkg/debugger"
 	"yaml-anchor/pkg/schema"
 )
 
@@ -150,7 +151,10 @@ func RunLocal(ctx context.Context, pipeline *schema.Pipeline, updates chan<- Upd
 			// Sync executes the step and captures stdout
 			_, err = container.Sync(ctx)
 			if err != nil {
-				send(UpdateMsg{JobName: jobName, Step: stepName, Status: "error", Error: err})
+				suggestions := debugger.Analyze(stepName, step.Run, err.Error())
+				debugOutput := debugger.Format(suggestions)
+				send(UpdateMsg{JobName: jobName, Step: stepName, Status: "error", Error: err,
+					LogLine: debugOutput})
 				return
 			}
 
@@ -206,6 +210,18 @@ func resolveImage(job *schema.Job) string {
 		return "ubuntu:22.04"
 	case "ubuntu-20.04":
 		return "ubuntu:20.04"
+	// Cross-Platform Shims: macOS runners map to a Linux base image.
+	// True macOS simulation is not possible in Docker; we use ubuntu as an approximation.
+	case "macos-latest", "macos-13", "macos-12":
+		fmt.Println("⚠️  Cross-Platform Shim: macOS runner detected. Using ubuntu:22.04 as a Linux approximation.")
+		fmt.Println("   Note: macOS-specific tooling (e.g., Homebrew, Xcode) will not be available.")
+		return "ubuntu:22.04"
+	// Cross-Platform Shims: Windows runners map to a Linux base image.
+	// True Windows container simulation requires Windows hosts.
+	case "windows-latest", "windows-2022", "windows-2019":
+		fmt.Println("⚠️  Cross-Platform Shim: Windows runner detected. Using ubuntu:22.04 as a Linux approximation.")
+		fmt.Println("   Note: Windows-specific tooling (e.g., PowerShell Core, MSVC) will not be available.")
+		return "ubuntu:22.04"
 	default:
 		return job.RunsOn
 	}
