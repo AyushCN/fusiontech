@@ -1,0 +1,29 @@
+# anchor.yaml — Your pipeline definition. Edit this file, then run:
+#   anchor generate   → produces .github/workflows/main.yml
+#   anchor local      → runs the pipeline locally via Docker
+
+name: "CI Pipeline"
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Checkout Code"
+        uses: "actions/checkout@v4"
+
+      - name: "Run Tests"
+        run: "go test ./..."
+
+      - name: "Build Binary"
+        run: "go build -o ./bin/app ./..."
+        env:
+          CGO_ENABLED: "0"
+          GOOS: "linux"
