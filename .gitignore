@@ -1,0 +1,29 @@
+# Go
+yaml-anchor/anchor
+yaml-anchor/bin/
+yaml-anchor/coverage.out
+yaml-anchor/coverage.html
+
+# Node
+yaml-anchor/ui/node_modules/
+yaml-anchor/ui/dist/
+
+# VS Code Extension
+vscode-anchor/node_modules/
+vscode-anchor/out/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.idea/
+*.swp
+*.swo
+
+# Env
+.env
+yaml-anchor/ui/.env
+
+# Logs
+*.log
