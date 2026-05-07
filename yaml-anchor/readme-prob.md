@@ -42,9 +42,9 @@ The "Hard Problems" we faced during development:
 - [x] **`anchor exec`**: Add a command to drop into an interactive shell inside the simulated runner.
 
 ### Phase 2: Features (Medium Term)
-- [ ] **Action Plugin System**: Allow users to write custom Go/JS shims for their proprietary actions.
-- [ ] **Matrix Support**: Enable simulation of parallel matrix builds locally.
-- [ ] **Cost Dashboard**: Convert CI minutes saved into actual dollar amounts based on runner pricing.
+- [x] **Action Plugin System**: Drop a `.sh` script in `.anchor/plugins/my-org/action.sh` and YamlAnchor will mount and execute it instead of skipping the action.
+- [x] **Matrix Support**: Jobs with a `strategy.matrix` are automatically expanded into separate named sub-jobs in the Pulse Dashboard.
+- [x] **Cost Dashboard**: The Telemetry Report now calculates actual dollar amounts saved based on GitHub runner pricing ($0.008/min).
 
 ### Phase 3: Intelligence (Long Term)
 - [ ] **LLM Debugger**: When a step fails, feed the logs to an LLM to suggest the exact YAML fix.

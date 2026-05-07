@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -95,6 +96,32 @@ func RunLocal(ctx context.Context, pipeline *schema.Pipeline, updates chan<- Upd
 					})
 					stepsExecuted++
 					continue
+				} else {
+					// Check for local plugin shim
+					pluginPath := filepath.Join(cwd, ".anchor", "plugins", step.Uses+".sh")
+					if _, err := os.Stat(pluginPath); err == nil {
+						send(UpdateMsg{
+							JobName: jobName, Step: stepName, Status: "running",
+							LogLine: fmt.Sprintf("⚙️ Executing custom plugin shim: %s", step.Uses),
+						})
+
+						// Mount the script and run it
+						container = container.WithFile("/tmp/shim.sh", client.Host().File(pluginPath))
+						container = container.WithExec([]string{"sh", "/tmp/shim.sh"})
+
+						_, err = container.Sync(ctx)
+						if err != nil {
+							send(UpdateMsg{JobName: jobName, Step: stepName, Status: "error", Error: err})
+							return
+						}
+
+						send(UpdateMsg{
+							JobName: jobName, Step: stepName, Status: "success",
+							LogLine: "✓ Custom plugin shim executed successfully.",
+						})
+						stepsExecuted++
+						continue
+					}
 				}
 
 				send(UpdateMsg{
@@ -147,10 +174,15 @@ func RunLocal(ctx context.Context, pipeline *schema.Pipeline, updates chan<- Upd
 	// Calculate and report Telemetry Metrics
 	duration := time.Since(startTime)
 	// Rough heuristic: CI takes ~3x longer due to queuing, image pulls over network, and overhead
-	estimatedSaved := duration * 3 
+	estimatedSaved := duration * 3
 	
-	metricsLog := fmt.Sprintf("==== TELEMETRY REPORT ====\nJobs Simulated: %d\nSteps Executed: %d\nLocal Execution Time: %s\nEstimated CI Time Saved: %s\n==========================", 
-		jobsSimulated, stepsExecuted, duration.Round(time.Second), estimatedSaved.Round(time.Second))
+	// Financial Cost Calculation
+	// GitHub Ubuntu runners are $0.008/minute
+	minutesSaved := estimatedSaved.Minutes()
+	costSaved := minutesSaved * 0.008
+	
+	metricsLog := fmt.Sprintf("==== TELEMETRY REPORT ====\nJobs Simulated: %d\nSteps Executed: %d\nLocal Execution Time: %s\nEstimated CI Time Saved: %s\n💸 Estimated Cost Saved: $%.4f\n==========================", 
+		jobsSimulated, stepsExecuted, duration.Round(time.Second), estimatedSaved.Round(time.Second), costSaved)
 	
 	send(UpdateMsg{
 		JobName: "System", Step: "Telemetry", Status: "success",

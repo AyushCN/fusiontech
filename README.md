@@ -54,17 +54,29 @@ The `anchor generate` command includes a built-in **Secret Scanner**.
 - Scans IR for hardcoded AWS keys, GitHub tokens, and Bearer tokens.
 - Blocks YAML generation if leaks are detected, preventing accidental pushes to remote.
 
-### 6. 🎨 YamlAnchor Studio (Web UI)
+### 6. 🧩 Action Plugin System
+Don't let unsupported third-party actions silently fail. Write a custom shim:
+- Drop a shell script at `.anchor/plugins/<owner>/<action>.sh` in your project.
+- YamlAnchor will automatically find, mount, and execute it inside the Dagger container.
+- Teams can codify their proprietary CI logic without modifying YamlAnchor itself.
+
+### 7. 🔢 Matrix Build Support
+Simulate parallel matrix strategies locally.
+- Add a `strategy.matrix` block to any job in `anchor.yaml`.
+- YamlAnchor automatically expands the job into named sub-runs (e.g. `test (1.21)`, `test (1.22)`).
+- Each expanded job gets the matrix variable injected as an environment variable.
+
+### 8. 🎨 YamlAnchor Studio (Web UI)
 A premium, glassmorphic React/Vite web application for visual pipeline management:
 - **Simulated AI Generator**: Describe your stack and generate a config instantly.
 - **Real-time Preview**: Synchronized YAML output with syntax highlighting.
 - **Visual Flowchart**: SVG-based graph showing job dependencies with **active fault detection**.
 
-### 7. 📊 Telemetry & Insights
+### 8. 📊 Telemetry & Cost Insights
 Every local run generates a **Telemetry Report**:
 - Actual local execution time vs. Estimated remote CI time.
 - Calculation of total CI minutes saved.
-- Metrics to justify local testing before pushing.
+- 💸 **Financial Cost Saved**: Dollar amount saved based on GitHub runner pricing ($0.008/minute).
 
 ---
 
