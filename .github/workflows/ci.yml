@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  go-tests:
+    name: Go Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.21"
+
+      - name: Download Dependencies
+        working-directory: yaml-anchor
+        run: go mod download
+
+      - name: Run Tests
+        working-directory: yaml-anchor
+        run: go test ./pkg/... -v -race
+
+      - name: Check Build
+        working-directory: yaml-anchor
+        run: go build -o /dev/null main.go
+
+  ui-lint:
+    name: UI Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: "npm"
+          cache-dependency-path: yaml-anchor/ui/package-lock.json
+
+      - name: Install Dependencies
+        working-directory: yaml-anchor/ui
+        run: npm ci
+
+      - name: Lint
+        working-directory: yaml-anchor/ui
+        run: npm run lint
+
+      - name: Build
+        working-directory: yaml-anchor/ui
+        run: npm run build
