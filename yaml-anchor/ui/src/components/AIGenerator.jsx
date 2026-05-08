@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { TerminalSquare, Cpu, Loader2, Wifi, WifiOff } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { TerminalSquare, Cpu, Loader2, Wifi, WifiOff, Play, ShieldCheck, ScanSearch } from 'lucide-react';
 import { api } from '../services/api';
 
 // Detect file type from user input text heuristically
@@ -41,7 +41,7 @@ function transformPipelineResponse(backendPipeline) {
 }
 
 export default function AIGenerator({ onPipelineGenerated }) {
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState('React frontend with Docker image build, npm lint, npm build, and tests on pull requests');
   const [isGenerating, setIsGenerating] = useState(false);
   const [backendOnline, setBackendOnline] = useState(false);
   const [error, setError] = useState('');
@@ -153,53 +153,65 @@ export default function AIGenerator({ onPipelineGenerated }) {
     });
   };
 
+  const quickPrompts = [
+    'Go API with unit tests, binary build, and Docker packaging',
+    'React frontend with npm lint, npm test, and production build',
+    'Python service with pytest and Docker image build',
+  ];
+
   return (
-    <div className="panel">
+    <div className="panel generator-panel">
       <div className="panel-header">
-        <div style={{ display: 'flex', alignItems: 'center' }}>
+        <div className="panel-title">
           <TerminalSquare size={16} />
-          Input &amp; AI Generator
+          Pipeline Intake
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.7rem' }}>
+        <div className={`status-pill ${backendOnline ? 'online' : 'offline'}`}>
           {backendOnline ? (
-            <><Wifi size={12} style={{ color: 'var(--accent-green)' }} /><span style={{ color: 'var(--accent-green)' }}>BACKEND LIVE</span></>
+            <><Wifi size={12} /><span>backend live</span></>
           ) : (
-            <><WifiOff size={12} style={{ color: 'var(--text-secondary)' }} /><span style={{ color: 'var(--text-secondary)' }}>LOCAL MODE</span></>
+            <><WifiOff size={12} /><span>local fallback</span></>
           )}
         </div>
       </div>
       <div className="panel-content">
         <div className="ai-input-wrapper">
-          <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-            Describe your project stack or paste your code. The AI will analyze it and construct the optimal YamlAnchor pipeline.
-            <br /><br />
-            <em>Hint: Try mentioning "React and Docker" or "Go with unit tests".</em>
-            {!backendOnline && (
-              <><br /><br />
-              <span style={{ color: 'var(--accent-yellow, #f59e0b)', fontSize: '0.8rem' }}>
-                ⚡ Run <code>anchor server</code> to connect the backend for real pipeline generation.
-              </span></>
-            )}
-          </p>
+          <div className="workflow-rail" aria-label="YamlAnchor workflow">
+            <div><ScanSearch size={15} /><span>detect</span></div>
+            <div><ShieldCheck size={15} /><span>validate</span></div>
+            <div><Play size={15} /><span>simulate</span></div>
+          </div>
 
           {error && (
-            <div style={{ padding: '0.6rem 0.8rem', background: 'rgba(239,68,68,0.1)', border: '1px solid var(--danger)', borderRadius: '6px', color: 'var(--danger)', fontSize: '0.8rem', marginBottom: '0.75rem' }}>
+            <div className="notice error">
               {error}
             </div>
           )}
 
           {statusMsg && !error && (
-            <div style={{ padding: '0.6rem 0.8rem', background: 'rgba(99,102,241,0.1)', border: '1px solid var(--accent)', borderRadius: '6px', color: 'var(--accent)', fontSize: '0.8rem', marginBottom: '0.75rem' }}>
+            <div className="notice">
               {statusMsg}
             </div>
           )}
 
+          <div className="prompt-label">
+            <span>Describe the stack, checks, deploy target, or paste config</span>
+            {!backendOnline && <code>run: anchor server</code>}
+          </div>
           <textarea
             className="ai-textarea"
-            placeholder="e.g., I have a Go backend that needs testing and building, then packaging into a Docker container..."
+            placeholder="e.g. Go API with unit tests, Docker build, secret scan, and deploy only on main..."
             value={input}
             onChange={(e) => setInput(e.target.value)}
           />
+
+          <div className="quick-prompts">
+            {quickPrompts.map((prompt) => (
+              <button type="button" key={prompt} onClick={() => setInput(prompt)}>
+                {prompt}
+              </button>
+            ))}
+          </div>
 
           <button
             className="btn btn-ai"
