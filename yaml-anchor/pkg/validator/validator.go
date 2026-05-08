@@ -21,19 +21,25 @@ func (r *ValidationResult) Error() string {
 	return strings.Join(r.Errors, "; ")
 }
 
+// jobIDRegex mirrors nektos/act's job name validation rule exactly.
+// Job names must start with a letter or underscore, and contain only
+// alphanumeric characters, hyphens, or underscores.
+var jobIDRegex = regexp.MustCompile(`^([[:alpha:]_][[:alnum:]_\-]*)$`)
+
 // ValidateJobID checks that a job ID conforms to GitHub Actions naming rules.
 func ValidateJobID(id string) error {
 	if id == "" {
 		return fmt.Errorf("job ID cannot be empty")
 	}
-	if !regexp.MustCompile(`^[a-zA-Z0-9_-]+$`).MatchString(id) {
-		return fmt.Errorf("job ID %q contains invalid characters (only alphanumeric, underscore, hyphen allowed)", id)
-	}
-	if len(id) > 50 {
-		return fmt.Errorf("job ID %q too long (max 50 characters)", id)
+	if !jobIDRegex.MatchString(id) {
+		return fmt.Errorf(
+			"job ID %q is invalid: names must start with a letter or '_' and contain only alphanumeric characters, '-', or '_'",
+			id,
+		)
 	}
 	return nil
 }
+
 
 // ValidateStepName checks that a step name is valid.
 func ValidateStepName(name string) error {

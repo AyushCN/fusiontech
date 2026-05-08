@@ -195,8 +195,14 @@ func RunLocal(ctx context.Context, pipeline *schema.Pipeline, updates chan<- Upd
 }
 
 // resolveImage maps GitHub Actions runner names to real Docker image names.
+// Uses RunsOnLabels() to support string, array, and map forms of runs-on.
 func resolveImage(job *schema.Job) string {
-	switch job.RunsOn {
+	labels := job.RunsOnLabels()
+	runner := ""
+	if len(labels) > 0 {
+		runner = labels[0]
+	}
+	switch runner {
 	case "ubuntu-latest", "ubuntu-22.04":
 		// Check if any step uses Go — prefer a Go image for better compatibility
 		for _, step := range job.Steps {
@@ -223,9 +229,11 @@ func resolveImage(job *schema.Job) string {
 		fmt.Println("   Note: Windows-specific tooling (e.g., PowerShell Core, MSVC) will not be available.")
 		return "ubuntu:22.04"
 	default:
-		return job.RunsOn
+		// self-hosted or label-based runner — default to ubuntu
+		return "ubuntu:22.04"
 	}
 }
+
 
 // resolveStepName returns a display name for a step.
 func resolveStepName(step *schema.Step) string {

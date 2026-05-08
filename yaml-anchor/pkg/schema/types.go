@@ -3,7 +3,9 @@ package schema
 import (
 	"fmt"
 	"regexp"
+	"strings"
 )
+
 
 // Pipeline represents a complete CI/CD workflow
 type Pipeline struct {
@@ -19,7 +21,9 @@ type Pipeline struct {
 type Job struct {
 	Name         string                 `yaml:"name,omitempty" json:"name,omitempty"`
 	Blueprint    string                 `yaml:"blueprint,omitempty" json:"blueprint,omitempty"`
-	RunsOn       string                 `yaml:"runs-on" json:"runs_on"`
+	// RunsOn accepts a string, a list of strings, or a {group, labels} map.
+	// Use RunsOnLabels() to get the resolved list of runner labels.
+	RunsOn       interface{}            `yaml:"runs-on" json:"runs_on"`
 	Environment  string                 `yaml:"environment,omitempty" json:"environment,omitempty"`
 	Concurrency  interface{}            `yaml:"concurrency,omitempty" json:"concurrency,omitempty"`
 	Outputs      map[string]interface{} `yaml:"outputs,omitempty" json:"outputs,omitempty"`
@@ -118,12 +122,9 @@ func (p *Pipeline) Validate() error {
 
 // Validate checks if a job is valid
 func (j *Job) Validate(jobID string) error {
-	if j.RunsOn == "" {
+	labels := j.RunsOnLabels()
+	if len(labels) == 0 {
 		return fmt.Errorf("job %q must specify runs-on", jobID)
-	}
-
-	if !isValidRunner(j.RunsOn) {
-		return fmt.Errorf("job %q has invalid runner: %s", jobID, j.RunsOn)
 	}
 
 	if len(j.Steps) == 0 {
@@ -137,6 +138,155 @@ func (j *Job) Validate(jobID string) error {
 	}
 
 	return nil
+}
+
+// RunsOnLabels returns the list of runner labels from the runs-on field.
+// Handles all three GitHub Actions forms:
+//   - string:  "ubuntu-latest"
+//   - array:   ["self-hosted", "linux"]
+//   - map:     {group: mygroup, labels: [large]}
+func (j *Job) RunsOnLabels() []string {
+	switch v := j.RunsOn.(type) {
+	case string:
+		if v == "" {
+			return nil
+		}
+		return []string{v}
+	case []interface{}:
+		var labels []string
+		for _, item := range v {
+			if s, ok := item.(string); ok {
+				labels = append(labels, s)
+			}
+		}
+		return labels
+	case map[string]interface{}:
+		var labels []string
+		if group, ok := v["group"].(string); ok && group != "" {
+			labels = append(labels, group)
+		}
+		if rawLabels, ok := v["labels"]; ok {
+			switch l := rawLabels.(type) {
+			case string:
+				labels = append(labels, l)
+			case []interface{}:
+				for _, item := range l {
+					if s, ok := item.(string); ok {
+						labels = append(labels, s)
+					}
+				}
+			}
+		}
+		return labels
+	}
+	return nil
+}
+
+// --- Step type classification (from nektos/act) ---
+
+// StepType describes the kind of step.
+type StepType int
+
+const (
+	StepTypeRun                 StepType = iota // `run:` shell command
+	StepTypeUsesDockerURL                       // `uses: docker://...`
+	StepTypeUsesActionLocal                     // `uses: ./local-action`
+	StepTypeUsesActionRemote                    // `uses: owner/repo@ref`
+	StepTypeReusableWorkflowLocal               // `uses: ./.github/workflows/foo.yml`
+	StepTypeReusableWorkflowRemote              // `uses: org/repo/.github/workflows/foo.yml@ref`
+	StepTypeInvalid                             // missing or conflicting fields
+)
+
+func (t StepType) String() string {
+	switch t {
+	case StepTypeRun:
+		return "run"
+	case StepTypeUsesDockerURL:
+		return "docker"
+	case StepTypeUsesActionLocal:
+		return "local-action"
+	case StepTypeUsesActionRemote:
+		return "remote-action"
+	case StepTypeReusableWorkflowLocal:
+		return "local-reusable-workflow"
+	case StepTypeReusableWorkflowRemote:
+		return "remote-reusable-workflow"
+	case StepTypeInvalid:
+		return "invalid"
+	}
+	return "unknown"
+}
+
+// Type classifies the step, mirroring nektos/act's step type resolution.
+func (s *Step) Type() StepType {
+	if s.Run == "" && s.Uses == "" {
+		return StepTypeInvalid
+	}
+	if s.Run != "" && s.Uses != "" {
+		return StepTypeInvalid // cannot have both
+	}
+	if s.Run != "" {
+		return StepTypeRun
+	}
+	// uses-based classification
+	if strings.HasPrefix(s.Uses, "docker://") {
+		return StepTypeUsesDockerURL
+	}
+	isLocalWorkflow := strings.HasPrefix(s.Uses, "./.github/workflows") &&
+		(strings.HasSuffix(s.Uses, ".yml") || strings.HasSuffix(s.Uses, ".yaml"))
+	if isLocalWorkflow {
+		return StepTypeReusableWorkflowLocal
+	}
+	isRemoteWorkflow := !strings.HasPrefix(s.Uses, "./") &&
+		strings.Contains(s.Uses, ".github/workflows") &&
+		(strings.Contains(s.Uses, ".yml@") || strings.Contains(s.Uses, ".yaml@"))
+	if isRemoteWorkflow {
+		return StepTypeReusableWorkflowRemote
+	}
+	if strings.HasPrefix(s.Uses, "./") {
+		return StepTypeUsesActionLocal
+	}
+	return StepTypeUsesActionRemote
+}
+
+// ShellCommand returns the shell invocation string for this step's shell setting.
+// Mirrors GitHub Actions runner behavior and nektos/act's shell mapping.
+func (s *Step) ShellCommand() string {
+	switch s.Shell {
+	case "", "bash":
+		return "bash --noprofile --norc -eo pipefail {0}"
+	case "sh":
+		return "sh -e {0}"
+	case "pwsh":
+		return "pwsh -command . '{0}'"
+	case "powershell":
+		return "powershell -command . '{0}'"
+	case "python":
+		return "python {0}"
+	case "cmd":
+		return `cmd /D /E:ON /V:OFF /S /C "CALL "{0}""`
+	default:
+		// Custom shell — use as-is, caller substitutes {0} with script path
+		return s.Shell
+	}
+}
+
+// String returns a human-readable name for the step.
+func (s *Step) String() string {
+	if s.Name != "" {
+		return s.Name
+	}
+	if s.Uses != "" {
+		return s.Uses
+	}
+	if s.Run != "" {
+		lines := strings.SplitN(s.Run, "\n", 2)
+		if len(lines[0]) > 60 {
+			return lines[0][:60] + "..."
+		}
+		return lines[0]
+	}
+	return s.Id
 }
 
 // Validate checks if a step is valid

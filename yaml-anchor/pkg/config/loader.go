@@ -25,12 +25,25 @@ func Load(filepath string) (*schema.Pipeline, error) {
 	return pipeline, nil
 }
 
-// ParseYAML parses YAML string and returns a validated Pipeline
+// ParseYAML parses YAML string and returns a validated Pipeline.
+// It resolves YAML anchors and aliases first so that &anchor/*alias
+// syntax works correctly in pipeline files.
 func ParseYAML(content string) (*schema.Pipeline, error) {
-	var pipeline schema.Pipeline
-
-	if err := yaml.Unmarshal([]byte(content), &pipeline); err != nil {
+	// Decode into a raw yaml.Node so we can resolve anchors first
+	var root yaml.Node
+	if err := yaml.Unmarshal([]byte(content), &root); err != nil {
 		return nil, fmt.Errorf("failed to parse YAML: %w", err)
+	}
+
+	// resolveAnchors walks the YAML node tree and inlines all aliases,
+	// so &anchor / *alias pairs are fully expanded before struct decode.
+	if root.Kind != 0 {
+		resolveAnchors(&root)
+	}
+
+	var pipeline schema.Pipeline
+	if err := root.Decode(&pipeline); err != nil {
+		return nil, fmt.Errorf("failed to decode pipeline: %w", err)
 	}
 
 	pipeline.Jobs = expandMatrix(pipeline.Jobs)
@@ -393,3 +406,44 @@ func deepCopyJob(job *schema.Job) *schema.Job {
 
 	return newJob
 }
+
+// resolveAnchors walks the yaml.Node tree and replaces every AliasNode with
+// a deep copy of its anchor target. This mirrors nektos/act's resolveAliases()
+// and ensures &anchor / *alias YAML syntax is fully expanded before struct decode.
+func resolveAnchors(node *yaml.Node) {
+	if node == nil {
+		return
+	}
+	for i, child := range node.Content {
+		if child.Kind == yaml.AliasNode && child.Alias != nil {
+			// Replace alias with a copy of the anchor so struct decode sees real values
+			node.Content[i] = deepCopyYAMLNode(child.Alias)
+		} else {
+			resolveAnchors(child)
+		}
+	}
+}
+
+// deepCopyYAMLNode returns a deep copy of a yaml.Node, preserving all fields.
+func deepCopyYAMLNode(n *yaml.Node) *yaml.Node {
+	if n == nil {
+		return nil
+	}
+	cp := &yaml.Node{
+		Kind:        n.Kind,
+		Style:       n.Style,
+		Tag:         n.Tag,
+		Value:       n.Value,
+		Anchor:      n.Anchor,
+		HeadComment: n.HeadComment,
+		LineComment:  n.LineComment,
+		FootComment: n.FootComment,
+		Line:        n.Line,
+		Column:      n.Column,
+	}
+	for _, child := range n.Content {
+		cp.Content = append(cp.Content, deepCopyYAMLNode(child))
+	}
+	return cp
+}
+
