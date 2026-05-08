@@ -4,11 +4,12 @@ import (
 	"fmt"
 	"os"
 
+	"yaml-anchor/pkg/blueprints"
+	"yaml-anchor/pkg/detector"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/sergi/go-diff/diffmatchpatch"
 	"github.com/spf13/cobra"
-	"yaml-anchor/pkg/blueprints"
-	"yaml-anchor/pkg/detector"
 )
 
 var initCmd = &cobra.Command{

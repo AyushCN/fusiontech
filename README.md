@@ -1,6 +1,8 @@
 # YamlAnchor ⚓ — The Debugger for CI Pipelines
 
 [![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=for-the-badge&logo=go)](https://go.dev/)
+[![CI](https://github.com/AyushCN/fusiontech/actions/workflows/ci.yml/badge.svg)](https://github.com/AyushCN/fusiontech/actions/workflows/ci.yml)
+[![Release](https://github.com/AyushCN/fusiontech/actions/workflows/release.yml/badge.svg)](https://github.com/AyushCN/fusiontech/releases)
 [![Dagger Engine](https://img.shields.io/badge/Engine-Dagger-FF6C37?style=for-the-badge&logo=docker)](https://dagger.io/)
 [![TUI](https://img.shields.io/badge/UI-Bubbletea-ED5282?style=for-the-badge)](https://github.com/charmbracelet/bubbletea)
 [![Web UI](https://img.shields.io/badge/Studio-Vite%20%2B%20React-646CFF?style=for-the-badge&logo=vite)](https://vitejs.dev/)
@@ -89,12 +91,17 @@ Every local run generates a **Telemetry Report**:
 
 ### Installation
 
+#### Option A — Download Binary (recommended)
 ```bash
-# Clone the repository
+# Linux amd64
+curl -L https://github.com/AyushCN/fusiontech/releases/latest/download/anchor_linux_amd64.tar.gz | tar xz
+sudo mv anchor /usr/local/bin/
+```
+
+#### Option B — Build from source
+```bash
 git clone https://github.com/ayushcn/fusiontech.git
 cd fusiontech/yaml-anchor
-
-# Build the CLI
 go build -o anchor main.go
 sudo mv anchor /usr/local/bin/
 ```
@@ -125,12 +132,21 @@ jobs:
 
 | Command | Description |
 |:--- |:--- |
-| `anchor init` | Automatically detect your stack and scaffold a smart `anchor.yaml`. |
-| `anchor scan` | Standalone secret scanner (entropy detection) with git hook support. |
-| `anchor generate` | Validates IR, scans for secrets, and exports `.github/workflows/main.yml`. |
-| `anchor local` | Starts the **Pulse Dashboard** and executes the pipeline in Dagger. |
-| `anchor exec <job>` | Drops into an interactive shell inside a Dagger container configured for the job. |
-| `anchor clean` | Prunes dangling containers and clears the Dagger/Docker cache. |
+| `anchor init` | Auto-detect your stack and scaffold a smart `anchor.yaml`. |
+| `anchor scan` | Standalone secret scanner (entropy + regex) with git hook support. |
+| `anchor generate` | Validate, scan for secrets, and export `.github/workflows/main.yml`. |
+| `anchor generate --dry-run` | Validate only — no files written to disk. |
+| `anchor local` | Start the **Pulse Dashboard** and execute the pipeline in Dagger. |
+| `anchor exec <job>` | Drop into an interactive shell inside a Dagger container for the job. |
+| `anchor server` | Start the REST API server for YamlAnchor Studio. |
+| `anchor version` | Print version, commit hash, Go version, OS/arch. |
+| `anchor clean` | Prune dangling containers and clear Dagger/Docker cache. |
+
+**Global flags** (work with every command):
+```
+-c, --config string   Path to anchor.yaml (default: anchor.yaml)
+-v, --verbose         Enable debug-level structured logging
+```
 
 ### Running the Studio (Web UI)
 ```bash
@@ -145,19 +161,39 @@ npm run dev
 
 ```
 yaml-anchor/
-├── cmd/                # CLI implementation (Cobra)
-│   ├── generate.go     # YAML Export + Secret Scanning
-│   ├── local.go        # Dagger Engine + TUI integration
-│   └── clean.go        # Resource management
+├── cmd/                # CLI commands (Cobra)
+│   ├── generate.go     # YAML export — --dry-run, --verbose, secret blocking
+│   ├── local.go        # Dagger + Bubbletea TUI integration
+│   ├── server.go       # REST API (/health, /api/analyze, /api/generate, /api/validate)
+│   ├── scan.go         # Standalone secret scanner with git hook support
+│   ├── version.go      # Build-time version info (injected by GoReleaser)
+│   └── root.go         # Global --config, --verbose flags
 ├── pkg/
-│   ├── schema/         # Type-Safe Pipeline IR (Job, Step, Needs)
-│   ├── config/         # YAML Loader + Blueprint Expansion
-│   ├── simulator/      # Dagger Engine + Action Shims + Telemetry
+│   ├── schema/         # Type-safe Pipeline IR + DAG validation
+│   ├── config/         # YAML loader + multi-dimensional matrix expansion
+│   ├── blueprints/     # Blueprint → job step expansion
+│   ├── detector/       # Auto stack detection from go.mod / package.json
+│   ├── analyzer/       # Code analysis for Studio AI generator
+│   ├── simulator/      # Dagger engine + action shims + telemetry
 │   ├── tui/            # Bubbletea Pulse Dashboard
-│   └── scanner/        # Automated Secret Detection
-└── ui/                 # YamlAnchor Studio (React + Vite)
-    ├── src/components/ # AIGenerator, VisualGraph, YAMLPreview
-    └── src/App.jsx     # Glassmorphic Layout
+│   ├── scanner/        # Secret scanner (AWS/GitHub/Slack/Azure/SSH regex + entropy)
+│   ├── debugger/       # Pattern-based error analysis + fix suggestions
+│   ├── errors/         # Typed errors: ConfigError, ValidationError, SecurityError
+│   ├── validator/      # Input validation: job IDs, runners, cron, step names
+│   └── logger/         # Structured leveled logger with color + file output
+├── ui/                 # YamlAnchor Studio (React + Vite)
+│   ├── src/components/ # AIGenerator, VisualGraph, YAMLPreview
+│   └── src/App.jsx     # Glassmorphic layout
+├── examples/           # Real anchor.yaml examples (Go, Node, Python, Matrix, Full-stack)
+├── vscode-anchor/      # VS Code extension scaffold
+├── .github/
+│   ├── workflows/ci.yml      # CI: go test -race on every push/PR
+│   └── workflows/release.yml # Release: GoReleaser builds multi-platform binaries on tags
+├── Makefile            # make build | test-go | coverage | lint
+├── .goreleaser.yaml    # Multi-platform release config
+├── CONTRIBUTING.md     # Contribution guide
+├── SETUP.md            # Installation & usage guide
+└── API_DOCS.md         # REST API reference
 ```
 
 ---
