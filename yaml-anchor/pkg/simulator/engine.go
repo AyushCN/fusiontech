@@ -57,16 +57,8 @@ func RunLocal(ctx context.Context, pipeline *schema.Pipeline, updates chan<- Upd
 		jobsSimulated++
 		send(UpdateMsg{JobName: jobName, Status: "running", Step: "Initializing Container"})
 
-		image := resolveImage(job)
-		
-		// Blueprint expansion
-		if job.Blueprint == "go-app" {
-			job.Steps = append([]*schema.Step{
-				{Name: "Go Dependencies", Run: "go mod download"},
-				{Name: "Go Build", Run: "go build ./..."},
-				{Name: "Go Test", Run: "go test -v ./..."},
-			}, job.Steps...)
-		}
+		steps := expandBlueprintSteps(job)
+		image := resolveImageForSteps(job, steps)
 
 		container := client.Container().
 			From(image).
@@ -78,7 +70,7 @@ func RunLocal(ctx context.Context, pipeline *schema.Pipeline, updates chan<- Upd
 			LogLine: fmt.Sprintf("Using image: %s", image),
 		})
 
-		for _, step := range job.Steps {
+		for _, step := range steps {
 			stepName := resolveStepName(step)
 
 			// Handle 'uses' steps with Action Shims
@@ -179,15 +171,15 @@ func RunLocal(ctx context.Context, pipeline *schema.Pipeline, updates chan<- Upd
 	duration := time.Since(startTime)
 	// Rough heuristic: CI takes ~3x longer due to queuing, image pulls over network, and overhead
 	estimatedSaved := duration * 3
-	
+
 	// Financial Cost Calculation
 	// GitHub Ubuntu runners are $0.008/minute
 	minutesSaved := estimatedSaved.Minutes()
 	costSaved := minutesSaved * 0.008
-	
-	metricsLog := fmt.Sprintf("==== TELEMETRY REPORT ====\nJobs Simulated: %d\nSteps Executed: %d\nLocal Execution Time: %s\nEstimated CI Time Saved: %s\n💸 Estimated Cost Saved: $%.4f\n==========================", 
+
+	metricsLog := fmt.Sprintf("==== TELEMETRY REPORT ====\nJobs Simulated: %d\nSteps Executed: %d\nLocal Execution Time: %s\nEstimated CI Time Saved: %s\n💸 Estimated Cost Saved: $%.4f\n==========================",
 		jobsSimulated, stepsExecuted, duration.Round(time.Second), estimatedSaved.Round(time.Second), costSaved)
-	
+
 	send(UpdateMsg{
 		JobName: "System", Step: "Telemetry", Status: "success",
 		LogLine: metricsLog,
@@ -197,6 +189,10 @@ func RunLocal(ctx context.Context, pipeline *schema.Pipeline, updates chan<- Upd
 // resolveImage maps GitHub Actions runner names to real Docker image names.
 // Uses RunsOnLabels() to support string, array, and map forms of runs-on.
 func resolveImage(job *schema.Job) string {
+	return resolveImageForSteps(job, job.Steps)
+}
+
+func resolveImageForSteps(job *schema.Job, steps []*schema.Step) string {
 	labels := job.RunsOnLabels()
 	runner := ""
 	if len(labels) > 0 {
@@ -205,7 +201,7 @@ func resolveImage(job *schema.Job) string {
 	switch runner {
 	case "ubuntu-latest", "ubuntu-22.04":
 		// Check if any step uses Go — prefer a Go image for better compatibility
-		for _, step := range job.Steps {
+		for _, step := range steps {
 			if strings.Contains(step.Run, "go ") || strings.Contains(step.Run, "go\t") || strings.Contains(step.Uses, "setup-go") {
 				return "golang:1.26"
 			}
@@ -234,6 +230,24 @@ func resolveImage(job *schema.Job) string {
 	}
 }
 
+func expandBlueprintSteps(job *schema.Job) []*schema.Step {
+	switch job.Blueprint {
+	case "go-app":
+		return append([]*schema.Step{
+			{Name: "Go Dependencies", Run: "go mod download"},
+			{Name: "Go Build", Run: "go build ./..."},
+			{Name: "Go Test", Run: "go test -v ./..."},
+		}, job.Steps...)
+	case "node-app":
+		return append([]*schema.Step{
+			{Name: "Install Dependencies", Run: "npm ci"},
+			{Name: "Node Test", Run: "npm test --if-present"},
+			{Name: "Node Build", Run: "npm run build --if-present"},
+		}, job.Steps...)
+	default:
+		return job.Steps
+	}
+}
 
 // resolveStepName returns a display name for a step.
 func resolveStepName(step *schema.Step) string {
