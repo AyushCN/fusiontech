@@ -63,7 +63,6 @@ func Write(pipeline *schema.Pipeline, filepath string) error {
 func expandMatrix(jobs map[string]*schema.Job) map[string]*schema.Job {
 	expanded := make(map[string]*schema.Job)
 
-	// Sort jobNames to ensure deterministic processing order
 	var jobNames []string
 	for jobName := range jobs {
 		jobNames = append(jobNames, jobName)
@@ -80,46 +79,34 @@ func expandMatrix(jobs map[string]*schema.Job) map[string]*schema.Job {
 				continue
 			}
 
-			var keys []string
-			for k := range matrixRaw {
-				keys = append(keys, k)
-			}
-			sort.Strings(keys)
-
-			var values [][]string
-			for _, k := range keys {
-				vRaw := matrixRaw[k]
-				vArr, ok := vRaw.([]interface{})
-				if !ok {
-					// Fallback to treat non-array as single item array if needed, but per schema it should be array
-					values = append(values, []string{fmt.Sprintf("%v", vRaw)})
-					continue
-				}
-				var strVals []string
-				for _, val := range vArr {
-					strVals = append(strVals, fmt.Sprintf("%v", val))
-				}
-				values = append(values, strVals)
+			matrixes, err := getMatrixes(matrixRaw)
+			if err != nil {
+				// Fall back to unexpanded job on parse error
+				expanded[jobName] = job
+				continue
 			}
 
-			// Cartesian product
-			combinations := cartesianProduct(values)
+			for _, combo := range matrixes {
+				// Sort keys for a deterministic job name suffix
+				var keys []string
+				for k := range combo {
+					keys = append(keys, k)
+				}
+				sort.Strings(keys)
 
-			for _, combo := range combinations {
 				var suffixParts []string
-				for _, val := range combo {
-					suffixParts = append(suffixParts, val)
+				for _, k := range keys {
+					suffixParts = append(suffixParts, fmt.Sprintf("%v", combo[k]))
 				}
-				suffix := strings.Join(suffixParts, ", ")
-				newJobName := fmt.Sprintf("%s (%s)", jobName, suffix)
+				newJobName := fmt.Sprintf("%s (%s)", jobName, strings.Join(suffixParts, ", "))
 
 				newJob := deepCopyJob(job)
 				newJob.Strategy = nil
 				if newJob.Env == nil {
 					newJob.Env = make(map[string]string)
 				}
-				for i, k := range keys {
-					newJob.Env[k] = combo[i]
+				for k, v := range combo {
+					newJob.Env[k] = fmt.Sprintf("%v", v)
 				}
 				expanded[newJobName] = newJob
 			}
@@ -131,28 +118,143 @@ func expandMatrix(jobs map[string]*schema.Job) map[string]*schema.Job {
 	return expanded
 }
 
-func cartesianProduct(arrays [][]string) [][]string {
-	if len(arrays) == 0 {
-		return [][]string{}
-	}
-	if len(arrays) == 1 {
-		var res [][]string
-		for _, v := range arrays[0] {
-			res = append(res, []string{v})
+// getMatrixes returns all matrix combinations with include/exclude applied.
+// This is a direct port of GitHub Actions semantics from nektos/act.
+func getMatrixes(matrixRaw map[string]interface{}) ([]map[string]interface{}, error) {
+	includes := extractMatrixList(matrixRaw["include"])
+	excludes := extractMatrixList(matrixRaw["exclude"])
+
+	dims := make(map[string][]interface{})
+	var dimKeys []string
+	for k, v := range matrixRaw {
+		if k == "include" || k == "exclude" {
+			continue
 		}
-		return res
+		if vArr, ok := v.([]interface{}); ok {
+			dims[k] = vArr
+		} else {
+			dims[k] = []interface{}{v}
+		}
+		dimKeys = append(dimKeys, k)
+	}
+	sort.Strings(dimKeys)
+
+	// Validate excludes — all keys must be known dimension keys
+	for _, excl := range excludes {
+		for k := range excl {
+			if _, ok := dims[k]; !ok {
+				return nil, fmt.Errorf("matrix exclude key %q does not match any key in the matrix", k)
+			}
+		}
 	}
 
-	var res [][]string
-	rest := cartesianProduct(arrays[1:])
-	for _, v := range arrays[0] {
-		for _, r := range rest {
-			combo := append([]string{v}, r...)
-			res = append(res, combo)
+	// Compute full Cartesian product of dimension values
+	product := matrixCartesian(dims, dimKeys)
+
+	// Apply excludes
+	var afterExcludes []map[string]interface{}
+PRODUCT:
+	for _, combo := range product {
+		for _, excl := range excludes {
+			if matrixKeysMatch(combo, excl) {
+				continue PRODUCT
+			}
+		}
+		afterExcludes = append(afterExcludes, combo)
+	}
+
+	// Apply includes:
+	// - If an include matches existing combos on their dimension keys, merge new keys in.
+	// - If no match, append as a new standalone combo.
+	var extraIncludes []map[string]interface{}
+	for _, incl := range includes {
+		matched := false
+		for _, combo := range afterExcludes {
+			if matrixKeysMatch2(combo, incl, dims) {
+				matched = true
+				for k, v := range incl {
+					combo[k] = v
+				}
+			}
+		}
+		if !matched {
+			extraIncludes = append(extraIncludes, incl)
 		}
 	}
-	return res
+	afterExcludes = append(afterExcludes, extraIncludes...)
+
+	if len(afterExcludes) == 0 {
+		afterExcludes = append(afterExcludes, make(map[string]interface{}))
+	}
+	return afterExcludes, nil
 }
+
+func extractMatrixList(raw interface{}) []map[string]interface{} {
+	if raw == nil {
+		return nil
+	}
+	var result []map[string]interface{}
+	switch t := raw.(type) {
+	case []interface{}:
+		for _, item := range t {
+			if m, ok := item.(map[string]interface{}); ok {
+				result = append(result, m)
+			}
+		}
+	case map[string]interface{}:
+		result = append(result, t)
+	}
+	return result
+}
+
+// matrixCartesian computes the Cartesian product of dims in deterministic key order.
+func matrixCartesian(dims map[string][]interface{}, keys []string) []map[string]interface{} {
+	if len(keys) == 0 {
+		return []map[string]interface{}{{}}
+	}
+	first := keys[0]
+	rest := matrixCartesian(dims, keys[1:])
+	var result []map[string]interface{}
+	for _, v := range dims[first] {
+		for _, r := range rest {
+			combo := make(map[string]interface{})
+			for k, val := range r {
+				combo[k] = val
+			}
+			combo[first] = v
+			result = append(result, combo)
+		}
+	}
+	return result
+}
+
+// matrixKeysMatch returns true if all keys in b that also appear in a have equal string values.
+func matrixKeysMatch(a, b map[string]interface{}) bool {
+	for k, bv := range b {
+		if av, ok := a[k]; ok {
+			if fmt.Sprintf("%v", av) != fmt.Sprintf("%v", bv) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// matrixKeysMatch2 checks that b's dimension-keyed values match a.
+func matrixKeysMatch2(a, b map[string]interface{}, dims map[string][]interface{}) bool {
+	for k, bv := range b {
+		if _, isDim := dims[k]; isDim {
+			if av, ok := a[k]; ok {
+				if fmt.Sprintf("%v", av) != fmt.Sprintf("%v", bv) {
+					return false
+				}
+			}
+		}
+	}
+	return true
+}
+
+
 
 func deepCopyJob(job *schema.Job) *schema.Job {
 	newJob := &schema.Job{

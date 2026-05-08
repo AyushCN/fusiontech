@@ -110,7 +110,6 @@ jobs:
 	if len(pipeline.Jobs) != 4 {
 		t.Errorf("Expected 4 matrix-expanded jobs, got %d", len(pipeline.Jobs))
 	}
-	// keys are sorted: os, version
 	expectedJobs := []string{
 		"test (macos-latest, 1)",
 		"test (macos-latest, 2)",
@@ -128,5 +127,91 @@ func TestParseYAML_InvalidYAML(t *testing.T) {
 	_, err := ParseYAML("not: valid: yaml: at: all: {{{")
 	if err == nil {
 		t.Error("Expected error for invalid YAML, got nil")
+	}
+}
+
+// --- Matrix include/exclude tests (ported from nektos/act semantics) ---
+
+func TestGetMatrixes_ExcludeRemovesCombo(t *testing.T) {
+	raw := map[string]interface{}{
+		"os":      []interface{}{"ubuntu", "windows"},
+		"version": []interface{}{"1", "2"},
+		"exclude": []interface{}{
+			map[string]interface{}{"os": "windows", "version": "1"},
+		},
+	}
+	result, err := getMatrixes(raw)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// 4 combos - 1 excluded = 3
+	if len(result) != 3 {
+		t.Errorf("expected 3 results after exclude, got %d: %v", len(result), result)
+	}
+	for _, r := range result {
+		if r["os"] == "windows" && r["version"] == "1" {
+			t.Error("excluded combo (windows, 1) should not be present")
+		}
+	}
+}
+
+func TestGetMatrixes_IncludeAddsNewCombo(t *testing.T) {
+	raw := map[string]interface{}{
+		"os": []interface{}{"ubuntu"},
+		"include": []interface{}{
+			map[string]interface{}{"os": "macos", "extra": "value"},
+		},
+	}
+	result, err := getMatrixes(raw)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// 1 original + 1 extra include = 2
+	if len(result) != 2 {
+		t.Errorf("expected 2 results with include, got %d: %v", len(result), result)
+	}
+}
+
+func TestGetMatrixes_IncludeMergesIntoExisting(t *testing.T) {
+	raw := map[string]interface{}{
+		"os": []interface{}{"ubuntu"},
+		"include": []interface{}{
+			map[string]interface{}{"os": "ubuntu", "color": "blue"},
+		},
+	}
+	result, err := getMatrixes(raw)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// Still 1 combo, but with "color" merged in
+	if len(result) != 1 {
+		t.Errorf("expected 1 result (merged), got %d: %v", len(result), result)
+	}
+	if result[0]["color"] != "blue" {
+		t.Errorf("expected 'color' to be merged into combo, got: %v", result[0])
+	}
+}
+
+func TestGetMatrixes_ExcludeUnknownKey_ReturnsError(t *testing.T) {
+	raw := map[string]interface{}{
+		"os": []interface{}{"ubuntu"},
+		"exclude": []interface{}{
+			map[string]interface{}{"nonexistent": "value"},
+		},
+	}
+	_, err := getMatrixes(raw)
+	if err == nil {
+		t.Error("expected error for exclude with unknown key, got nil")
+	}
+}
+
+func TestGetMatrixes_EmptyMatrix_ReturnsOneEmptyCombo(t *testing.T) {
+	raw := map[string]interface{}{}
+	result, err := getMatrixes(raw)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result) != 1 {
+		t.Errorf("expected 1 empty combo for empty matrix, got %d", len(result))
 	}
 }
