@@ -58,6 +58,7 @@ type AnalyzeRequest struct {
 type GenerateRequest struct {
 	Code     string `json:"code"`
 	FileType string `json:"file_type"`
+	Prompt   string `json:"prompt"`
 }
 
 type ValidateRequest struct {
@@ -95,7 +96,7 @@ func handleDocs(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	j := json.NewEncoder(w)
 	j.Encode(map[string]interface{}{
-		"name": "YamlAnchor API",
+		"name":    "YamlAnchor API",
 		"version": "0.1.0",
 		"endpoints": []map[string]string{
 			{"path": "/health", "method": "GET"},
@@ -109,7 +110,7 @@ func handleDocs(w http.ResponseWriter, r *http.Request) {
 func handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"status": "ok",
+		"status":  "ok",
 		"version": "0.1.0",
 	})
 }
@@ -153,13 +154,21 @@ func handleGenerate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Code == "" {
-		respondError(w, http.StatusBadRequest, "code field is required")
+	content := strings.TrimSpace(req.Code)
+	if content == "" {
+		content = strings.TrimSpace(req.Prompt)
+	}
+	if content == "" {
+		respondError(w, http.StatusBadRequest, "code or prompt field is required")
 		return
+	}
+	fileType := strings.TrimSpace(req.FileType)
+	if fileType == "" {
+		fileType = inferFileType(content)
 	}
 
 	// Analyze and generate
-	analysis := analyzer.AnalyzeCode(req.Code, req.FileType)
+	analysis := analyzer.AnalyzeCode(content, fileType)
 
 	// Create basic pipeline
 	pipeline := &schema.Pipeline{
@@ -173,10 +182,11 @@ func handleGenerate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Add jobs based on analysis
-	if analysis.Framework != "" {
-		job := createJobForFramework(analysis.Framework)
-		pipeline.Jobs["build"] = job
+	framework := analysis.Framework
+	if framework == "" {
+		framework = analysis.Language
 	}
+	pipeline.Jobs["build"] = createJobForFramework(framework)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(pipeline)
@@ -243,9 +253,27 @@ func createJobForFramework(framework string) *schema.Job {
 	}
 
 	return &schema.Job{
-		Name:     strings.Title(framework) + " Build",
-		RunsOn:   "ubuntu-latest",
-		Steps:    steps,
+		Name:   strings.Title(framework) + " Build",
+		RunsOn: "ubuntu-latest",
+		Steps:  steps,
+	}
+}
+
+func inferFileType(content string) string {
+	lower := strings.ToLower(content)
+	switch {
+	case strings.Contains(lower, "package.json") || strings.Contains(lower, "npm ") || strings.Contains(lower, "node"):
+		return "package.json"
+	case strings.Contains(lower, "dockerfile") || strings.Contains(lower, "docker build"):
+		return "dockerfile"
+	case strings.Contains(lower, "go.mod") || strings.Contains(lower, "golang") || strings.Contains(lower, "go test"):
+		return "go"
+	case strings.Contains(lower, "react") || strings.Contains(lower, "jsx"):
+		return "jsx"
+	case strings.Contains(lower, "python") || strings.Contains(lower, "pytest") || strings.Contains(lower, "django") || strings.Contains(lower, "flask"):
+		return "python"
+	default:
+		return "go"
 	}
 }
 

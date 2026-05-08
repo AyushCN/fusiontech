@@ -1,20 +1,27 @@
-import React from 'react';
-import { Activity, AlertTriangle, CheckCircle2, CircleDashed } from 'lucide-react';
+import { Activity, CircleDashed, GitCommitHorizontal, ShieldAlert } from 'lucide-react';
 
 export default function VisualGraph({ pipeline }) {
-  if (!pipeline || !pipeline.jobs || pipeline.jobs.length === 0) {
+  const jobs = Array.isArray(pipeline?.jobs)
+    ? pipeline.jobs
+    : Object.entries(pipeline?.jobs || {}).map(([id, job]) => ({
+        id,
+        runsOn: job.runsOn || job.runs_on || 'ubuntu-latest',
+        steps: job.steps || [],
+      }));
+
+  if (!pipeline || jobs.length === 0) {
     return (
-      <div className="panel">
+      <div className="panel graph-panel">
         <div className="panel-header">
-          <div style={{ display: 'flex', alignItems: 'center' }}>
+          <div className="panel-title">
             <Activity size={16} />
-            Visual Pipeline Graph
+            Flow Trace
           </div>
         </div>
         <div className="graph-container">
-          <div style={{ color: 'var(--text-secondary)', textAlign: 'center', fontFamily: 'var(--font-mono)' }}>
-            <CircleDashed size={48} style={{ margin: '0 auto 1rem', opacity: 0.2 }} />
-            Awaiting Pipeline Generation...
+          <div className="empty-state">
+            <CircleDashed size={44} />
+            <span>Generate a pipeline to inspect the DAG</span>
           </div>
         </div>
       </div>
@@ -44,18 +51,18 @@ export default function VisualGraph({ pipeline }) {
 
   // Render SVG nodes
   return (
-    <div className="panel">
+    <div className="panel graph-panel">
       <div className="panel-header">
-        <div style={{ display: 'flex', alignItems: 'center' }}>
+        <div className="panel-title">
           <Activity size={16} />
-          Visual Pipeline Graph
+          Flow Trace
         </div>
-        <span style={{ fontSize: '0.7rem', color: 'var(--accent-green)' }}>LIVE TRACE</span>
+        <span className="status-pill online">dag ready</span>
       </div>
       
       <div className="panel-content graph-container" style={{ overflow: 'auto' }}>
         {/* Make SVG large enough to scroll if many jobs */}
-        <svg width={Math.max(600, pipeline.jobs.length * jobSpacingX + 100)} height={800} style={{ minWidth: '100%', minHeight: '100%' }}>
+        <svg width={Math.max(600, jobs.length * jobSpacingX + 100)} height={800} style={{ minWidth: '100%', minHeight: '100%' }}>
           <defs>
             <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
               <polygon points="0 0, 10 3.5, 0 7" fill="var(--text-secondary)" />
@@ -67,12 +74,12 @@ export default function VisualGraph({ pipeline }) {
           </defs>
 
           {/* Root Node */}
-          <rect x={startX - 75} y={startY} width="150" height="40" rx="4" fill="var(--bg-panel)" stroke="var(--accent-blue)" strokeWidth="2" filter="url(#glow)"/>
-          <text x={startX} y={startY + 25} fill="#fff" textAnchor="middle" fontSize="12" fontWeight="bold">Pipeline: {pipeline.name || 'CI'}</text>
+          <rect x={startX - 90} y={startY} width="180" height="44" rx="6" fill="var(--bg-panel)" stroke="var(--accent-blue)" strokeWidth="2" filter="url(#glow)"/>
+          <text x={startX} y={startY + 27} fill="#fff" textAnchor="middle" fontSize="12" fontWeight="bold">{pipeline.name || 'Generated Pipeline'}</text>
 
-          {pipeline.jobs.map((job, jIdx) => {
+          {jobs.map((job, jIdx) => {
             // Calculate job X position centering around startX
-            const totalWidth = (pipeline.jobs.length - 1) * jobSpacingX;
+            const totalWidth = (jobs.length - 1) * jobSpacingX;
             const jobX = startX - (totalWidth / 2) + (jIdx * jobSpacingX);
             const jobY = startY + 100;
 
@@ -91,8 +98,8 @@ export default function VisualGraph({ pipeline }) {
                 />
 
                 {/* Job Node */}
-                <rect x={jobX - 90} y={jobY} width="180" height="50" rx="4" fill="var(--bg-panel)" stroke={jobHasNoSteps ? "var(--danger)" : "var(--accent-amber)"} strokeWidth="2" />
-                <text x={jobX} y={jobY + 20} fill="#fff" textAnchor="middle" fontSize="12" fontWeight="bold">Job: {job.id}</text>
+                <rect x={jobX - 90} y={jobY} width="180" height="50" rx="6" fill="var(--bg-panel)" stroke={jobHasNoSteps ? "var(--danger)" : "var(--accent-amber)"} strokeWidth="2" />
+                <text x={jobX} y={jobY + 20} fill="#fff" textAnchor="middle" fontSize="12" fontWeight="bold">{job.id}</text>
                 <text x={jobX} y={jobY + 38} fill="var(--text-secondary)" textAnchor="middle" fontSize="10">{job.runsOn}</text>
 
                 {jobHasNoSteps && (
@@ -121,7 +128,7 @@ export default function VisualGraph({ pipeline }) {
                       />
 
                       {/* Step Node */}
-                      <rect x={stepX - 85} y={stepY} width="170" height="40" rx="4" fill="var(--bg-input)" stroke={strokeColor} strokeWidth="2" />
+                      <rect x={stepX - 85} y={stepY} width="170" height="42" rx="6" fill="var(--bg-input)" stroke={strokeColor} strokeWidth="2" />
                       
                       {/* Icon Status */}
                       {isFaulty ? (
@@ -150,6 +157,10 @@ export default function VisualGraph({ pipeline }) {
             );
           })}
         </svg>
+      </div>
+      <div className="summary-strip">
+        <span><GitCommitHorizontal size={13} /> {jobs.length} job nodes</span>
+        <span><ShieldAlert size={13} /> inline fault scan</span>
       </div>
     </div>
   );

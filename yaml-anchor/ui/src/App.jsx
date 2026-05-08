@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import AIGenerator from './components/AIGenerator';
 import VisualGraph from './components/VisualGraph';
-import { Anchor, Download, Copy, Check, FileCode2 } from 'lucide-react';
+import { Anchor, Download, Copy, Check, FileCode2, GitBranch, ShieldCheck, TerminalSquare } from 'lucide-react';
 import hljs from 'highlight.js/lib/core';
 import yamlLanguage from 'highlight.js/lib/languages/yaml';
 import 'highlight.js/styles/atom-one-dark-reasonable.css'; // Fits the terminal theme better
@@ -10,41 +10,50 @@ import yaml from 'js-yaml';
 hljs.registerLanguage('yaml', yamlLanguage);
 
 function App() {
-  const [pipelineData, setPipelineData] = useState(null); // We'll hold the raw object for the graph
   const [pipelineState, setPipelineState] = useState(null);
-  const [yamlContent, setYamlContent] = useState('');
   const [copied, setCopied] = useState(false);
 
-  // Convert pipeline object to YAML string whenever it changes
-  useEffect(() => {
-    if (!pipelineState) return;
-    
-    // Format to match YamlAnchor spec
-    const yamlObj = {
-      name: pipelineState.name,
-      on: pipelineState.on,
-      jobs: {}
-    };
+  const pipelineStats = useMemo(() => {
+    const jobs = Array.isArray(pipelineState?.jobs) ? pipelineState.jobs : [];
+    const steps = jobs.reduce((total, job) => total + (job.steps?.length || 0), 0);
+    const remoteActions = jobs.reduce(
+      (total, job) => total + (job.steps || []).filter((step) => step.uses).length,
+      0
+    );
+    const shellSteps = steps - remoteActions;
 
-    if (pipelineState.jobs) {
-      pipelineState.jobs.forEach(job => {
+    return { jobs: jobs.length, steps, remoteActions, shellSteps };
+  }, [pipelineState]);
+
+  const { yamlContent, yamlError } = useMemo(() => {
+    if (!pipelineState) {
+      return { yamlContent: '', yamlError: '' };
+    }
+    try {
+      const jobs = Array.isArray(pipelineState.jobs) ? pipelineState.jobs : [];
+      const yamlObj = {
+        name: pipelineState.name || 'Generated Pipeline',
+        on: pipelineState.on || { push: { branches: ['main'] } },
+        jobs: {}
+      };
+
+      jobs.forEach(job => {
         yamlObj.jobs[job.id] = {
-          'runs-on': job.runsOn,
-          steps: job.steps.map(step => {
-            const s = { name: step.name };
+          'runs-on': job.runsOn || 'ubuntu-latest',
+          steps: (job.steps || []).map(step => {
+            const s = { name: step.name || 'Step' };
             if (step.uses) s.uses = step.uses;
             if (step.run) s.run = step.run;
             return s;
           })
         };
       });
-    }
 
-    try {
       const yamlStr = yaml.dump(yamlObj, { lineWidth: -1 });
-      setYamlContent(yamlStr);
+      return { yamlContent: yamlStr, yamlError: '' };
     } catch (e) {
       console.error('Failed to generate YAML', e);
+      return { yamlContent: '', yamlError: 'Failed to generate YAML from the pipeline response.' };
     }
   }, [pipelineState]);
 
@@ -84,52 +93,72 @@ function App() {
       <header className="header">
         <div className="logo-container">
           <Anchor className="logo-icon" size={28} />
-          <h1>YamlAnchor <span style={{ color: 'var(--accent-green)' }}>Studio</span></h1>
+          <div>
+            <h1>YamlAnchor <span>Studio</span></h1>
+            <p className="product-subtitle">Typed CI preflight, workflow generation, and local simulation</p>
+          </div>
         </div>
-        <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>
-          AI_ENGINE: SIMULATED | STATUS: ONLINE
+        <div className="header-metrics" aria-label="Current pipeline summary">
+          <div className="metric-pill">
+            <GitBranch size={14} />
+            <span>{pipelineStats.jobs} jobs</span>
+          </div>
+          <div className="metric-pill">
+            <TerminalSquare size={14} />
+            <span>{pipelineStats.steps} steps</span>
+          </div>
+          <div className="metric-pill healthy">
+            <ShieldCheck size={14} />
+            <span>preflight ready</span>
+          </div>
         </div>
       </header>
 
       <main className="workspace">
-        {/* Left Panel: Mock AI Generator */}
         <AIGenerator onPipelineGenerated={handlePipelineGenerated} />
 
-        {/* Middle Panel: YAML Output */}
-        <div className="panel">
+        <div className="panel output-panel">
           <div className="panel-header">
-            <div style={{ display: 'flex', alignItems: 'center' }}>
+            <div className="panel-title">
               <FileCode2 size={16} />
-              Generated YAML
+              anchor.yaml
             </div>
             {yamlContent && (
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <button className="btn" onClick={handleCopy} style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}>
+              <div className="panel-actions">
+                <button className="icon-btn" onClick={handleCopy} aria-label="Copy generated YAML">
                   {copied ? <Check size={14} color="var(--accent-green)" /> : <Copy size={14} />}
-                  {copied ? 'COPIED' : 'COPY'}
                 </button>
-                <button className="btn btn-ai" onClick={handleDownload} style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}>
-                  <Download size={14} /> DL
+                <button className="icon-btn primary" onClick={handleDownload} aria-label="Download anchor.yaml">
+                  <Download size={14} />
                 </button>
               </div>
             )}
           </div>
-          <div className="panel-content" style={{ background: '#0d1117' }}>
-            {yamlContent ? (
-              <pre style={{ margin: 0, padding: '1rem', minHeight: '100%' }}>
-                <code className="language-yaml" style={{ background: 'transparent', padding: 0 }}>
+          <div className="panel-content yaml-surface">
+            {yamlError ? (
+              <div className="empty-state danger-text">
+                {yamlError}
+              </div>
+            ) : yamlContent ? (
+              <pre className="yaml-preview">
+                <code className="language-yaml">
                   {yamlContent}
                 </code>
               </pre>
             ) : (
-              <div style={{ padding: '2rem', color: 'var(--text-secondary)', textAlign: 'center', opacity: 0.5 }}>
-                // Output will appear here
+              <div className="empty-state">
+                <FileCode2 size={36} />
+                <span>Generated anchor.yaml will appear here</span>
               </div>
             )}
           </div>
+          <div className="summary-strip">
+            <span>{pipelineStats.remoteActions} action shims</span>
+            <span>{pipelineStats.shellSteps} shell steps</span>
+            <span>{yamlContent ? 'YAML synchronized' : 'Awaiting pipeline'}</span>
+          </div>
         </div>
 
-        {/* Right Panel: Visual Graph & Fault Detection */}
         <VisualGraph pipeline={pipelineState} />
       </main>
     </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Plus, Trash2, Box, Settings, Play, Server, Layers } from 'lucide-react';
 import yaml from 'js-yaml';
 
