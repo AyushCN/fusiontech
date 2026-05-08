@@ -1,11 +1,14 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/spf13/cobra"
 	"yaml-anchor/pkg/config"
+	"yaml-anchor/pkg/simulator"
 )
 
 var simulateConfigPath string
@@ -46,8 +49,38 @@ pipeline execution locally. Use --dry-run to preview without executing.`,
 			return
 		}
 
-	fmt.Println("💡 Full simulation requires Docker (coming soon)")
+		ctx := context.Background()
+		updates := make(chan simulator.UpdateMsg, 64)
+
+		go simulator.RunLocal(ctx, pipeline, updates)
+		if err := printSimulationUpdates(updates); err != nil {
+			fmt.Printf("\n❌ Simulation failed: %v\n", err)
+			os.Exit(1)
+		}
 	},
+}
+
+func printSimulationUpdates(updates <-chan simulator.UpdateMsg) error {
+	for update := range updates {
+		if update.JobName != "" {
+			fmt.Printf("[%s]", update.JobName)
+		}
+		if update.Step != "" {
+			fmt.Printf(" %s", update.Step)
+		}
+		if update.Status != "" {
+			fmt.Printf(" — %s", update.Status)
+		}
+		if update.LogLine != "" {
+			fmt.Printf("\n  %s", update.LogLine)
+		}
+		fmt.Println()
+		if update.Error != nil {
+			return update.Error
+		}
+	}
+	fmt.Println("\n✅ Simulation complete")
+	return nil
 }
 
 func init() {

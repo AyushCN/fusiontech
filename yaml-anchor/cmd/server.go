@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"yaml-anchor/pkg/aigen"
 	"yaml-anchor/pkg/analyzer"
 	"yaml-anchor/pkg/generator"
 	"yaml-anchor/pkg/schema"
@@ -56,9 +57,12 @@ type AnalyzeRequest struct {
 }
 
 type GenerateRequest struct {
-	Code     string `json:"code"`
-	FileType string `json:"file_type"`
-	Prompt   string `json:"prompt"`
+	Code         string            `json:"code"`
+	FileType     string            `json:"file_type"`
+	Prompt       string            `json:"prompt"`
+	ProjectTree  []string          `json:"project_tree"`
+	ContextFiles map[string]string `json:"context_files"`
+	ExistingCI   map[string]string `json:"existing_ci"`
 }
 
 type ValidateRequest struct {
@@ -158,37 +162,24 @@ func handleGenerate(w http.ResponseWriter, r *http.Request) {
 	if content == "" {
 		content = strings.TrimSpace(req.Prompt)
 	}
+	content = appendProjectContext(content, req)
 	if content == "" {
 		respondError(w, http.StatusBadRequest, "code or prompt field is required")
 		return
 	}
 	fileType := strings.TrimSpace(req.FileType)
 	if fileType == "" {
-		fileType = inferFileType(content)
+		fileType = aigen.InferFileType(content)
 	}
 
-	// Analyze and generate
-	analysis := analyzer.AnalyzeCode(content, fileType)
-
-	// Create basic pipeline
-	pipeline := &schema.Pipeline{
-		Name: "Generated Pipeline",
-		On: map[string]interface{}{
-			"push": map[string]interface{}{
-				"branches": []string{"main"},
-			},
-		},
-		Jobs: make(map[string]*schema.Job),
+	pipeline, source, err := aigen.Generate(r.Context(), content, fileType)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
 	}
-
-	// Add jobs based on analysis
-	framework := analysis.Framework
-	if framework == "" {
-		framework = analysis.Language
-	}
-	pipeline.Jobs["build"] = createJobForFramework(framework)
 
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-YamlAnchor-Generator", source)
 	json.NewEncoder(w).Encode(pipeline)
 }
 
@@ -219,62 +210,42 @@ func handleValidate(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func createJobForFramework(framework string) *schema.Job {
-	var steps []*schema.Step
-
-	switch framework {
-	case "go":
-		steps = []*schema.Step{
-			{Name: "Checkout", Uses: "actions/checkout@v4"},
-			{Name: "Setup Go", Uses: "actions/setup-go@v4"},
-			{Name: "Run Tests", Run: "go test ./..."},
-			{Name: "Build", Run: "go build -o bin/app main.go"},
+func appendProjectContext(content string, req GenerateRequest) string {
+	var b strings.Builder
+	if strings.TrimSpace(content) != "" {
+		b.WriteString(strings.TrimSpace(content))
+		b.WriteString("\n\n")
+	}
+	if len(req.ProjectTree) > 0 {
+		b.WriteString("Project tree:\n")
+		for _, path := range req.ProjectTree {
+			b.WriteString("- ")
+			b.WriteString(path)
+			b.WriteString("\n")
 		}
-	case "nodejs", "react":
-		steps = []*schema.Step{
-			{Name: "Checkout", Uses: "actions/checkout@v4"},
-			{Name: "Setup Node", Uses: "actions/setup-node@v3"},
-			{Name: "Install", Run: "npm ci"},
-			{Name: "Lint", Run: "npm run lint"},
-			{Name: "Build", Run: "npm run build"},
-		}
-	case "python":
-		steps = []*schema.Step{
-			{Name: "Checkout", Uses: "actions/checkout@v4"},
-			{Name: "Setup Python", Uses: "actions/setup-python@v4"},
-			{Name: "Install Dependencies", Run: "pip install -r requirements.txt"},
-			{Name: "Run Tests", Run: "pytest"},
-		}
-	default:
-		steps = []*schema.Step{
-			{Name: "Checkout", Uses: "actions/checkout@v4"},
-			{Name: "Run", Run: "echo 'Building...'"},
+		b.WriteString("\n")
+	}
+	if len(req.ContextFiles) > 0 {
+		b.WriteString("Context files:\n")
+		for path, data := range req.ContextFiles {
+			b.WriteString("### ")
+			b.WriteString(path)
+			b.WriteString("\n")
+			b.WriteString(data)
+			b.WriteString("\n\n")
 		}
 	}
-
-	return &schema.Job{
-		Name:   strings.Title(framework) + " Build",
-		RunsOn: "ubuntu-latest",
-		Steps:  steps,
+	if len(req.ExistingCI) > 0 {
+		b.WriteString("Existing CI workflows:\n")
+		for path, data := range req.ExistingCI {
+			b.WriteString("### ")
+			b.WriteString(path)
+			b.WriteString("\n")
+			b.WriteString(data)
+			b.WriteString("\n\n")
+		}
 	}
-}
-
-func inferFileType(content string) string {
-	lower := strings.ToLower(content)
-	switch {
-	case strings.Contains(lower, "package.json") || strings.Contains(lower, "npm ") || strings.Contains(lower, "node"):
-		return "package.json"
-	case strings.Contains(lower, "dockerfile") || strings.Contains(lower, "docker build"):
-		return "dockerfile"
-	case strings.Contains(lower, "go.mod") || strings.Contains(lower, "golang") || strings.Contains(lower, "go test"):
-		return "go"
-	case strings.Contains(lower, "react") || strings.Contains(lower, "jsx"):
-		return "jsx"
-	case strings.Contains(lower, "python") || strings.Contains(lower, "pytest") || strings.Contains(lower, "django") || strings.Contains(lower, "flask"):
-		return "python"
-	default:
-		return "go"
-	}
+	return strings.TrimSpace(b.String())
 }
 
 func respondError(w http.ResponseWriter, statusCode int, message string) {

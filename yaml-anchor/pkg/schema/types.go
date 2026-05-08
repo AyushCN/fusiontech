@@ -6,68 +6,67 @@ import (
 	"strings"
 )
 
-
 // Pipeline represents a complete CI/CD workflow
 type Pipeline struct {
-	Name      string                 `yaml:"name" json:"name"`
-	On        map[string]interface{} `yaml:"on" json:"on"`
-	Env       map[string]string      `yaml:"env,omitempty" json:"env,omitempty"`
-	Concurrency interface{}           `yaml:"concurrency,omitempty" json:"concurrency,omitempty"`
-	Defaults  *Defaults              `yaml:"defaults,omitempty" json:"defaults,omitempty"`
-	Jobs      map[string]*Job        `yaml:"jobs" json:"jobs"`
+	Name        string                 `yaml:"name" json:"name"`
+	On          map[string]interface{} `yaml:"on" json:"on"`
+	Env         map[string]string      `yaml:"env,omitempty" json:"env,omitempty"`
+	Concurrency interface{}            `yaml:"concurrency,omitempty" json:"concurrency,omitempty"`
+	Defaults    *Defaults              `yaml:"defaults,omitempty" json:"defaults,omitempty"`
+	Jobs        map[string]*Job        `yaml:"jobs" json:"jobs"`
 }
 
 // Job represents a workflow job
 type Job struct {
-	Name         string                 `yaml:"name,omitempty" json:"name,omitempty"`
-	Blueprint    string                 `yaml:"blueprint,omitempty" json:"blueprint,omitempty"`
+	Name      string `yaml:"name,omitempty" json:"name,omitempty"`
+	Blueprint string `yaml:"blueprint,omitempty" json:"blueprint,omitempty"`
 	// RunsOn accepts a string, a list of strings, or a {group, labels} map.
 	// Use RunsOnLabels() to get the resolved list of runner labels.
-	RunsOn       interface{}            `yaml:"runs-on" json:"runs_on"`
-	Environment  string                 `yaml:"environment,omitempty" json:"environment,omitempty"`
-	Concurrency  interface{}            `yaml:"concurrency,omitempty" json:"concurrency,omitempty"`
-	Outputs      map[string]interface{} `yaml:"outputs,omitempty" json:"outputs,omitempty"`
-	Env          map[string]string      `yaml:"env,omitempty" json:"env,omitempty"`
-	Defaults     *Defaults              `yaml:"defaults,omitempty" json:"defaults,omitempty"`
-	If           string                 `yaml:"if,omitempty" json:"if,omitempty"`
-	Steps        []*Step                `yaml:"steps" json:"steps"`
-	Strategy     *Strategy              `yaml:"strategy,omitempty" json:"strategy,omitempty"`
-	Needs        []string               `yaml:"needs,omitempty" json:"needs,omitempty"`
-	Container    *Container             `yaml:"container,omitempty" json:"container,omitempty"`
-	Services     map[string]*Service    `yaml:"services,omitempty" json:"services,omitempty"`
-	TimeoutMinutes int                   `yaml:"timeout-minutes,omitempty" json:"timeout_minutes,omitempty"`
+	RunsOn         interface{}            `yaml:"runs-on" json:"runs_on"`
+	Environment    string                 `yaml:"environment,omitempty" json:"environment,omitempty"`
+	Concurrency    interface{}            `yaml:"concurrency,omitempty" json:"concurrency,omitempty"`
+	Outputs        map[string]interface{} `yaml:"outputs,omitempty" json:"outputs,omitempty"`
+	Env            map[string]string      `yaml:"env,omitempty" json:"env,omitempty"`
+	Defaults       *Defaults              `yaml:"defaults,omitempty" json:"defaults,omitempty"`
+	If             string                 `yaml:"if,omitempty" json:"if,omitempty"`
+	Steps          []*Step                `yaml:"steps" json:"steps"`
+	Strategy       *Strategy              `yaml:"strategy,omitempty" json:"strategy,omitempty"`
+	Needs          []string               `yaml:"needs,omitempty" json:"needs,omitempty"`
+	Container      *Container             `yaml:"container,omitempty" json:"container,omitempty"`
+	Services       map[string]*Service    `yaml:"services,omitempty" json:"services,omitempty"`
+	TimeoutMinutes int                    `yaml:"timeout-minutes,omitempty" json:"timeout_minutes,omitempty"`
 }
 
 // Step represents a single step in a job
 type Step struct {
-	Id       string                 `yaml:"id,omitempty" json:"id,omitempty"`
-	Name     string                 `yaml:"name,omitempty" json:"name,omitempty"`
-	Uses     string                 `yaml:"uses,omitempty" json:"uses,omitempty"`
-	Run      string                 `yaml:"run,omitempty" json:"run,omitempty"`
-	Shell    string                 `yaml:"shell,omitempty" json:"shell,omitempty"`
-	With     map[string]interface{} `yaml:"with,omitempty" json:"with,omitempty"`
-	Env      map[string]string      `yaml:"env,omitempty" json:"env,omitempty"`
-	If       string                 `yaml:"if,omitempty" json:"if,omitempty"`
-	Timeout  int                    `yaml:"timeout-minutes,omitempty" json:"timeout_minutes,omitempty"`
-	ContinueOnError bool              `yaml:"continue-on-error,omitempty" json:"continue_on_error,omitempty"`
-	WorkingDirectory string                    `yaml:"working-directory,omitempty" json:"working_directory,omitempty"`
+	Id               string                 `yaml:"id,omitempty" json:"id,omitempty"`
+	Name             string                 `yaml:"name,omitempty" json:"name,omitempty"`
+	Uses             string                 `yaml:"uses,omitempty" json:"uses,omitempty"`
+	Run              string                 `yaml:"run,omitempty" json:"run,omitempty"`
+	Shell            string                 `yaml:"shell,omitempty" json:"shell,omitempty"`
+	With             map[string]interface{} `yaml:"with,omitempty" json:"with,omitempty"`
+	Env              map[string]string      `yaml:"env,omitempty" json:"env,omitempty"`
+	If               string                 `yaml:"if,omitempty" json:"if,omitempty"`
+	Timeout          int                    `yaml:"timeout-minutes,omitempty" json:"timeout_minutes,omitempty"`
+	ContinueOnError  bool                   `yaml:"continue-on-error,omitempty" json:"continue_on_error,omitempty"`
+	WorkingDirectory string                 `yaml:"working-directory,omitempty" json:"working_directory,omitempty"`
 }
 
 // Strategy defines matrix and other execution strategies
 type Strategy struct {
-	Matrix interface{}          `yaml:"matrix,omitempty" json:"matrix,omitempty"`
-	FailFast bool                `yaml:"fail-fast,omitempty" json:"fail_fast,omitempty"`
-	MaxParallel int               `yaml:"max-parallel,omitempty" json:"max_parallel,omitempty"`
+	Matrix      interface{} `yaml:"matrix,omitempty" json:"matrix,omitempty"`
+	FailFast    bool        `yaml:"fail-fast,omitempty" json:"fail_fast,omitempty"`
+	MaxParallel int         `yaml:"max-parallel,omitempty" json:"max_parallel,omitempty"`
 }
 
 // Container specifies a Docker container for the job
 type Container struct {
-	Image string                   `yaml:"image" json:"image"`
-	Creds *Credentials             `yaml:"credentials,omitempty" json:"credentials,omitempty"`
-	Env   map[string]string        `yaml:"env,omitempty" json:"env,omitempty"`
-	Ports []int                    `yaml:"ports,omitempty" json:"ports,omitempty"`
-	Volumes []string              `yaml:"volumes,omitempty" json:"volumes,omitempty"`
-	Options string                 `yaml:"options,omitempty" json:"options,omitempty"`
+	Image   string            `yaml:"image" json:"image"`
+	Creds   *Credentials      `yaml:"credentials,omitempty" json:"credentials,omitempty"`
+	Env     map[string]string `yaml:"env,omitempty" json:"env,omitempty"`
+	Ports   []int             `yaml:"ports,omitempty" json:"ports,omitempty"`
+	Volumes []string          `yaml:"volumes,omitempty" json:"volumes,omitempty"`
+	Options string            `yaml:"options,omitempty" json:"options,omitempty"`
 }
 
 // Service represents a service container
@@ -188,13 +187,13 @@ func (j *Job) RunsOnLabels() []string {
 type StepType int
 
 const (
-	StepTypeRun                 StepType = iota // `run:` shell command
-	StepTypeUsesDockerURL                       // `uses: docker://...`
-	StepTypeUsesActionLocal                     // `uses: ./local-action`
-	StepTypeUsesActionRemote                    // `uses: owner/repo@ref`
-	StepTypeReusableWorkflowLocal               // `uses: ./.github/workflows/foo.yml`
-	StepTypeReusableWorkflowRemote              // `uses: org/repo/.github/workflows/foo.yml@ref`
-	StepTypeInvalid                             // missing or conflicting fields
+	StepTypeRun                    StepType = iota // `run:` shell command
+	StepTypeUsesDockerURL                          // `uses: docker://...`
+	StepTypeUsesActionLocal                        // `uses: ./local-action`
+	StepTypeUsesActionRemote                       // `uses: owner/repo@ref`
+	StepTypeReusableWorkflowLocal                  // `uses: ./.github/workflows/foo.yml`
+	StepTypeReusableWorkflowRemote                 // `uses: org/repo/.github/workflows/foo.yml@ref`
+	StepTypeInvalid                                // missing or conflicting fields
 )
 
 func (t StepType) String() string {
@@ -332,6 +331,10 @@ func validateDAG(jobs map[string]*Job) error {
 
 	var visit func(jobID string) error
 	visit = func(jobID string) error {
+		job, ok := jobs[jobID]
+		if !ok {
+			return fmt.Errorf("job %q depends on missing job %q", jobID, jobID)
+		}
 		if rec[jobID] {
 			return fmt.Errorf("circular dependency detected in job %q", jobID)
 		}
@@ -342,8 +345,10 @@ func validateDAG(jobs map[string]*Job) error {
 
 		rec[jobID] = true
 
-		job := jobs[jobID]
 		for _, need := range job.Needs {
+			if _, ok := jobs[need]; !ok {
+				return fmt.Errorf("job %q depends on missing job %q", jobID, need)
+			}
 			if err := visit(need); err != nil {
 				return err
 			}

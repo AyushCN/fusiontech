@@ -1,13 +1,75 @@
-import { Activity, CircleDashed, GitCommitHorizontal, ShieldAlert } from 'lucide-react';
+import { Activity, AlertTriangle, CircleDashed, GitCommitHorizontal, Route, ShieldAlert, Workflow } from 'lucide-react';
 
-export default function VisualGraph({ pipeline }) {
-  const jobs = Array.isArray(pipeline?.jobs)
-    ? pipeline.jobs
+function normalizeNeeds(needs) {
+  if (!needs) return [];
+  if (Array.isArray(needs)) return needs;
+  return [needs];
+}
+
+function normalizeJobs(pipeline) {
+  return Array.isArray(pipeline?.jobs)
+    ? pipeline.jobs.map((job) => ({
+        ...job,
+        runsOn: job.runsOn || job.runs_on || 'ubuntu-latest',
+        needs: normalizeNeeds(job.needs),
+        steps: job.steps || [],
+      }))
     : Object.entries(pipeline?.jobs || {}).map(([id, job]) => ({
         id,
+        name: job.name,
         runsOn: job.runsOn || job.runs_on || 'ubuntu-latest',
+        needs: normalizeNeeds(job.needs),
         steps: job.steps || [],
       }));
+}
+
+function analyzeStep(step) {
+  const faults = [];
+  const run = step.run || '';
+  if (!step.run && !step.uses) faults.push('Missing run or uses');
+  if (run.includes('curl') && run.includes('| bash')) faults.push('curl piped to shell');
+  if (!step.name || step.name.trim() === '') faults.push('Unnamed step');
+  if (/password|secret|token/i.test(run) && !run.includes('secrets.')) faults.push('Possible inline secret');
+  return faults;
+}
+
+function buildGraph(jobs) {
+  const ids = new Set(jobs.map((job) => job.id));
+  const missingNeeds = [];
+  const jobMeta = new Map();
+
+  jobs.forEach((job) => {
+    job.needs.forEach((need) => {
+      if (!ids.has(need)) missingNeeds.push(`${job.id} needs missing job ${need}`);
+    });
+  });
+
+  const getLevel = (job, visiting = new Set()) => {
+    if (jobMeta.has(job.id)) return jobMeta.get(job.id).level;
+    if (visiting.has(job.id)) return 0;
+    visiting.add(job.id);
+    const validNeeds = job.needs
+      .map((need) => jobs.find((candidate) => candidate.id === need))
+      .filter(Boolean);
+    const level = validNeeds.length === 0 ? 0 : 1 + Math.max(...validNeeds.map((needJob) => getLevel(needJob, visiting)));
+    visiting.delete(job.id);
+    jobMeta.set(job.id, { level });
+    return level;
+  };
+
+  jobs.forEach((job) => getLevel(job));
+  const levels = new Map();
+  jobs.forEach((job) => {
+    const level = jobMeta.get(job.id)?.level || 0;
+    if (!levels.has(level)) levels.set(level, []);
+    levels.get(level).push(job);
+  });
+
+  return { levels, missingNeeds };
+}
+
+export default function VisualGraph({ pipeline }) {
+  const jobs = normalizeJobs(pipeline);
 
   if (!pipeline || jobs.length === 0) {
     return (
@@ -28,28 +90,38 @@ export default function VisualGraph({ pipeline }) {
     );
   }
 
-  // Fault Detection Logic
-  const analyzeFaults = (step) => {
-    const faults = [];
-    if (!step.run && !step.uses) {
-      faults.push('Missing "run" or "uses" command');
-    }
-    if (step.run && step.run.includes('curl') && step.run.includes('| bash')) {
-      faults.push('Security Warning: Piping curl to bash is dangerous');
-    }
-    if (!step.name || step.name.trim() === '') {
-      faults.push('Step missing descriptive name');
-    }
-    return faults;
-  };
+  const { levels, missingNeeds } = buildGraph(jobs);
+  const allStepFaults = jobs.flatMap((job) =>
+    job.steps.flatMap((step, index) => analyzeStep(step).map((fault) => `${job.id} step ${index + 1}: ${fault}`))
+  );
+  const actionCount = jobs.reduce((total, job) => total + job.steps.filter((step) => step.uses).length, 0);
+  const shellCount = jobs.reduce((total, job) => total + job.steps.filter((step) => step.run).length, 0);
+  const maxLevel = Math.max(...levels.keys());
+  const levelWidth = 280;
+  const rowHeight = 140;
+  const nodeWidth = 220;
+  const nodeHeight = 88;
+  const marginX = 80;
+  const marginY = 70;
+  const maxRows = Math.max(...Array.from(levels.values()).map((levelJobs) => levelJobs.length));
+  const width = Math.max(760, (maxLevel + 1) * levelWidth + marginX * 2);
+  const height = Math.max(430, maxRows * rowHeight + marginY * 2);
+  const positions = new Map();
 
-  // Simple layout calculation
-  const startX = 300;
-  const startY = 50;
-  const jobSpacingX = 250;
-  const stepSpacingY = 80;
+  Array.from(levels.entries()).forEach(([level, levelJobs]) => {
+    const columnX = marginX + level * levelWidth;
+    const columnHeight = (levelJobs.length - 1) * rowHeight;
+    const startY = height / 2 - columnHeight / 2;
+    levelJobs.forEach((job, index) => {
+      positions.set(job.id, {
+        x: columnX,
+        y: startY + index * rowHeight,
+      });
+    });
+  });
 
-  // Render SVG nodes
+  const issueCount = missingNeeds.length + allStepFaults.length;
+
   return (
     <div className="panel graph-panel">
       <div className="panel-header">
@@ -57,110 +129,133 @@ export default function VisualGraph({ pipeline }) {
           <Activity size={16} />
           Flow Trace
         </div>
-        <span className="status-pill online">dag ready</span>
+        <span className={`status-pill ${issueCount === 0 ? 'online' : 'offline'}`}>
+          {issueCount === 0 ? 'dag ready' : `${issueCount} warnings`}
+        </span>
       </div>
-      
-      <div className="panel-content graph-container" style={{ overflow: 'auto' }}>
-        {/* Make SVG large enough to scroll if many jobs */}
-        <svg width={Math.max(600, jobs.length * jobSpacingX + 100)} height={800} style={{ minWidth: '100%', minHeight: '100%' }}>
-          <defs>
-            <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-              <polygon points="0 0, 10 3.5, 0 7" fill="var(--text-secondary)" />
-            </marker>
-            <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-              <feGaussianBlur stdDeviation="4" result="blur" />
-              <feComposite in="SourceGraphic" in2="blur" operator="over" />
-            </filter>
-          </defs>
 
-          {/* Root Node */}
-          <rect x={startX - 90} y={startY} width="180" height="44" rx="6" fill="var(--bg-panel)" stroke="var(--accent-blue)" strokeWidth="2" filter="url(#glow)"/>
-          <text x={startX} y={startY + 27} fill="#fff" textAnchor="middle" fontSize="12" fontWeight="bold">{pipeline.name || 'Generated Pipeline'}</text>
+      <div className="graph-workbench">
+        <div className="graph-sidebar">
+          <div className="graph-stat">
+            <Workflow size={16} />
+            <div>
+              <strong>{jobs.length}</strong>
+              <span>jobs</span>
+            </div>
+          </div>
+          <div className="graph-stat">
+            <GitCommitHorizontal size={16} />
+            <div>
+              <strong>{actionCount + shellCount}</strong>
+              <span>steps</span>
+            </div>
+          </div>
+          <div className="graph-stat">
+            <Route size={16} />
+            <div>
+              <strong>{maxLevel + 1}</strong>
+              <span>stages</span>
+            </div>
+          </div>
 
-          {jobs.map((job, jIdx) => {
-            // Calculate job X position centering around startX
-            const totalWidth = (jobs.length - 1) * jobSpacingX;
-            const jobX = startX - (totalWidth / 2) + (jIdx * jobSpacingX);
-            const jobY = startY + 100;
+          <div className="graph-section">
+            <h3>Execution Stages</h3>
+            {Array.from(levels.entries()).map(([level, levelJobs]) => (
+              <div className="stage-row" key={level}>
+                <span>Stage {level + 1}</span>
+                <strong>{levelJobs.map((job) => job.id).join(', ')}</strong>
+              </div>
+            ))}
+          </div>
 
-            const jobHasNoSteps = !job.steps || job.steps.length === 0;
+          <div className="graph-section">
+            <h3>Preflight</h3>
+            {issueCount === 0 ? (
+              <p className="graph-ok">No structural warnings found.</p>
+            ) : (
+              [...missingNeeds, ...allStepFaults].slice(0, 5).map((issue) => (
+                <p className="graph-warning" key={issue}>
+                  <AlertTriangle size={13} />
+                  {issue}
+                </p>
+              ))
+            )}
+          </div>
+        </div>
 
-            return (
-              <g key={job.id}>
-                {/* Edge from Root to Job */}
-                <path 
-                  d={`M ${startX} ${startY + 40} C ${startX} ${jobY - 30}, ${jobX} ${startY + 60}, ${jobX} ${jobY}`} 
-                  fill="none" 
-                  stroke="var(--text-secondary)" 
-                  strokeWidth="2" 
-                  markerEnd="url(#arrowhead)"
-                  className="path-flow"
-                />
+        <div className="panel-content graph-container graph-canvas">
+          <svg width={width} height={height} style={{ minWidth: '100%', minHeight: '100%' }}>
+            <defs>
+              <marker id="job-arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                <polygon points="0 0, 10 3.5, 0 7" fill="var(--accent-blue)" />
+              </marker>
+            </defs>
 
-                {/* Job Node */}
-                <rect x={jobX - 90} y={jobY} width="180" height="50" rx="6" fill="var(--bg-panel)" stroke={jobHasNoSteps ? "var(--danger)" : "var(--accent-amber)"} strokeWidth="2" />
-                <text x={jobX} y={jobY + 20} fill="#fff" textAnchor="middle" fontSize="12" fontWeight="bold">{job.id}</text>
-                <text x={jobX} y={jobY + 38} fill="var(--text-secondary)" textAnchor="middle" fontSize="10">{job.runsOn}</text>
+            {jobs.flatMap((job) =>
+              job.needs.map((need) => {
+                const from = positions.get(need);
+                const to = positions.get(job.id);
+                if (!from || !to) return null;
+                const fromX = from.x + nodeWidth;
+                const fromY = from.y + nodeHeight / 2;
+                const toX = to.x;
+                const toY = to.y + nodeHeight / 2;
+                const midX = fromX + (toX - fromX) / 2;
+                return (
+                  <path
+                    key={`${need}-${job.id}`}
+                    d={`M ${fromX} ${fromY} C ${midX} ${fromY}, ${midX} ${toY}, ${toX} ${toY}`}
+                    fill="none"
+                    stroke="var(--accent-blue)"
+                    strokeWidth="2"
+                    markerEnd="url(#job-arrowhead)"
+                    className="path-flow"
+                  />
+                );
+              })
+            )}
 
-                {jobHasNoSteps && (
-                  <text x={jobX} y={jobY + 65} fill="var(--danger)" textAnchor="middle" fontSize="10">Fault: No steps defined!</text>
-                )}
-
-                {/* Steps Nodes */}
-                {job.steps && job.steps.map((step, sIdx) => {
-                  const stepX = jobX;
-                  const stepY = jobY + 90 + (sIdx * stepSpacingY);
-                  const faults = analyzeFaults(step);
-                  const isFaulty = faults.length > 0;
-                  const isUses = !!step.uses;
-                  
-                  const strokeColor = isFaulty ? "var(--danger)" : (isUses ? "var(--accent-green)" : "var(--accent-blue)");
-
-                  return (
-                    <g key={step.id || sIdx}>
-                      {/* Edge from previous node to this step */}
-                      <path 
-                        d={`M ${stepX} ${sIdx === 0 ? jobY + 50 : stepY - stepSpacingY + 40} L ${stepX} ${stepY}`} 
-                        fill="none" 
-                        stroke="var(--text-secondary)" 
-                        strokeWidth="2" 
-                        markerEnd="url(#arrowhead)"
-                      />
-
-                      {/* Step Node */}
-                      <rect x={stepX - 85} y={stepY} width="170" height="42" rx="6" fill="var(--bg-input)" stroke={strokeColor} strokeWidth="2" />
-                      
-                      {/* Icon Status */}
-                      {isFaulty ? (
-                        <circle cx={stepX - 70} cy={stepY + 20} r="6" fill="var(--danger)" />
-                      ) : (
-                        <circle cx={stepX - 70} cy={stepY + 20} r="6" fill="var(--accent-green)" />
-                      )}
-
-                      <text x={stepX - 55} y={stepY + 24} fill="#fff" fontSize="11">{step.name || 'Unnamed Step'}</text>
-
-                      {/* Fault Annotations */}
-                      {isFaulty && (
-                        <g>
-                          <rect x={stepX + 95} y={stepY} width="140" height={faults.length * 15 + 10} rx="4" fill="rgba(239, 68, 68, 0.1)" stroke="var(--danger)" strokeWidth="1" strokeDasharray="2,2"/>
-                          {faults.map((f, fIdx) => (
-                            <text key={fIdx} x={stepX + 100} y={stepY + 15 + (fIdx * 15)} fill="var(--danger)" fontSize="9">! {f}</text>
-                          ))}
-                          {/* Pointer line */}
-                          <line x1={stepX + 85} y1={stepY + 20} x2={stepX + 95} y2={stepY + 20} stroke="var(--danger)" strokeWidth="1" strokeDasharray="2,2" />
-                        </g>
-                      )}
-                    </g>
-                  );
-                })}
-              </g>
-            );
-          })}
-        </svg>
+            {jobs.map((job) => {
+              const pos = positions.get(job.id);
+              const faults = job.steps.flatMap(analyzeStep);
+              const hasIssue = faults.length > 0 || job.needs.some((need) => !positions.has(need));
+              return (
+                <g key={job.id}>
+                  <rect
+                    x={pos.x}
+                    y={pos.y}
+                    width={nodeWidth}
+                    height={nodeHeight}
+                    rx="8"
+                    fill="var(--bg-panel)"
+                    stroke={hasIssue ? 'var(--danger)' : 'var(--accent-green)'}
+                    strokeWidth="2"
+                  />
+                  <text x={pos.x + 14} y={pos.y + 25} fill="#fff" fontSize="13" fontWeight="700">
+                    {job.id}
+                  </text>
+                  <text x={pos.x + 14} y={pos.y + 45} fill="var(--text-secondary)" fontSize="10">
+                    {job.runsOn}
+                  </text>
+                  <text x={pos.x + 14} y={pos.y + 67} fill="var(--accent-blue)" fontSize="10">
+                    {job.steps.length} steps · {job.steps.filter((step) => step.uses).length} actions · {job.steps.filter((step) => step.run).length} shell
+                  </text>
+                  {job.needs.length > 0 && (
+                    <text x={pos.x + 14} y={pos.y + 82} fill="var(--text-muted)" fontSize="9">
+                      needs: {job.needs.join(', ')}
+                    </text>
+                  )}
+                </g>
+              );
+            })}
+          </svg>
+        </div>
       </div>
+
       <div className="summary-strip">
         <span><GitCommitHorizontal size={13} /> {jobs.length} job nodes</span>
-        <span><ShieldAlert size={13} /> inline fault scan</span>
+        <span><Route size={13} /> {maxLevel + 1} execution stages</span>
+        <span><ShieldAlert size={13} /> {issueCount} warnings</span>
       </div>
     </div>
   );

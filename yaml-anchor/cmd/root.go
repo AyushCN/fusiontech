@@ -17,17 +17,19 @@ var rootCmd = &cobra.Command{
 	Short: "YamlAnchor - CI/CD Pipeline as Code",
 	Long: `YamlAnchor treats CI/CD pipelines as type-safe code.
 
-Instead of push → wait → fail → cry, validate and simulate locally.
+Instead of push → wait → fail → cry, validate, simulate, and auto-fix locally.
 
 Features:
   • Type-safe pipeline definitions
   • Local execution with Dagger Simulation (pkg/simulator)
   • Real-time monitoring with Bubbletea TUI (pkg/tui)
+  • Keyless YAML improvement loop with local/offline generation
   • Automatic secret scanning
   • Code analysis and suggestions
 
 Usage:
   anchor generate -c anchor.yaml        Generate GitHub Actions workflow
+  anchor improve -c anchor.yaml         Validate, run, and auto-fix YAML
   anchor simulate -c anchor.yaml        Simulate pipeline locally
   anchor server -p 8080                 Start REST API server
   anchor scan ./                        Scan for secrets
@@ -45,6 +47,9 @@ jobs:
 
   # Generate workflow
   anchor generate -c anchor.yaml
+
+  # Improve until it validates and runs
+  anchor improve -c anchor.yaml --max-iterations 5
 
   # Start API server
   anchor server -p 8080
