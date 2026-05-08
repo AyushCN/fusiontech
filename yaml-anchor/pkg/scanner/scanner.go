@@ -40,7 +40,11 @@ type ScanOptions struct {
 var defaultPatterns = map[string]*regexp.Regexp{
 	"AWS Access Key": regexp.MustCompile(`AKIA[0-9A-Z]{16}`),
 	"GitHub Token":   regexp.MustCompile(`(ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{36}`),
-	"Bearer Token":   regexp.MustCompile(`Bearer [a-zA-Z0-9\-\._~+/]+=*`),
+	"Bearer Token":   regexp.MustCompile(`(?i)bearer\s+[A-Za-z0-9\-\._~\+/]{20,}=*`),
+	"Azure JWT Token": regexp.MustCompile(`(?i)(eyJ[a-zA-Z0-9_-]{10,}\.eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,})`),
+	"Slack Token":    regexp.MustCompile(`xox[baprs]-[0-9]{10,}-[a-zA-Z0-9]{20,}`),
+	"SSH Private Key": regexp.MustCompile(`-----BEGIN (RSA|OPENSSH|DSA|EC|PGP) PRIVATE KEY-----`),
+	"Password Assignment": regexp.MustCompile(`(?i)(password|passwd|secret)\s*[:=]\s*['"]?[a-zA-Z0-9!@#\$%\^&\*\(\)_\+-=\[\]\{\};:,.<>/?]{8,}['"]?`),
 }
 
 // Scan crawls the given path and looks for secrets and sensitive files.

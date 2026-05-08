@@ -194,15 +194,18 @@ func handleValidate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var errors []string
+	var errStrings []string
 	if req.Pipeline != nil {
-		errors = generator.ValidatePipeline(req.Pipeline)
+		valErrs := generator.ValidatePipeline(req.Pipeline)
+		for _, e := range valErrs {
+			errStrings = append(errStrings, e.Error())
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(ValidationResponse{
-		Valid:  len(errors) == 0,
-		Errors: errors,
+		Valid:  len(errStrings) == 0,
+		Errors: errStrings,
 	})
 }
 

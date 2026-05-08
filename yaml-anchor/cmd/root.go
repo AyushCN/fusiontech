@@ -4,19 +4,25 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"yaml-anchor/pkg/logger"
+)
+
+var (
+	globalConfigPath string
+	globalVerbose    bool
 )
 
 var rootCmd = &cobra.Command{
 	Use:   "anchor",
-	Short: "YamlAnchor - CI/CD Pipeline Debugger",
+	Short: "YamlAnchor - CI/CD Pipeline as Code",
 	Long: `YamlAnchor treats CI/CD pipelines as type-safe code.
 
 Instead of push → wait → fail → cry, validate and simulate locally.
 
 Features:
   • Type-safe pipeline definitions
-  • Local execution with Dagger
-  • Real-time monitoring with Pulse Dashboard
+  • Local execution with Dagger Simulation (pkg/simulator)
+  • Real-time monitoring with Bubbletea TUI (pkg/tui)
   • Automatic secret scanning
   • Code analysis and suggestions
 
@@ -24,6 +30,7 @@ Usage:
   anchor generate -c anchor.yaml        Generate GitHub Actions workflow
   anchor simulate -c anchor.yaml        Simulate pipeline locally
   anchor server -p 8080                 Start REST API server
+  anchor scan ./                        Scan for secrets
   anchor clean                          Clean up cache
 
 Examples:
@@ -46,6 +53,13 @@ jobs:
   anchor simulate -c anchor.yaml --dry-run
 `,
 	Version: "0.1.0",
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		level := logger.LevelInfo
+		if globalVerbose {
+			level = logger.LevelDebug
+		}
+		logger.Init(level, "")
+	},
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -58,4 +72,8 @@ func Execute() {
 
 func init() {
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
+
+	// Global flags
+	rootCmd.PersistentFlags().StringVarP(&globalConfigPath, "config", "c", "anchor.yaml", "Path to anchor.yaml pipeline definition")
+	rootCmd.PersistentFlags().BoolVarP(&globalVerbose, "verbose", "v", false, "Enable verbose/debug logging")
 }

@@ -89,6 +89,41 @@ jobs:
 	}
 }
 
+func TestParseYAML_MultiMatrixExpansion(t *testing.T) {
+	yaml := `
+name: "Multi Matrix Test"
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: ["ubuntu-latest", "macos-latest"]
+        version: ["1", "2"]
+    steps:
+      - name: "Run"
+        run: "echo hello"
+`
+	pipeline, err := ParseYAML(yaml)
+	if err != nil {
+		t.Fatalf("ParseYAML() unexpected error: %v", err)
+	}
+	if len(pipeline.Jobs) != 4 {
+		t.Errorf("Expected 4 matrix-expanded jobs, got %d", len(pipeline.Jobs))
+	}
+	// keys are sorted: os, version
+	expectedJobs := []string{
+		"test (macos-latest, 1)",
+		"test (macos-latest, 2)",
+		"test (ubuntu-latest, 1)",
+		"test (ubuntu-latest, 2)",
+	}
+	for _, expectedName := range expectedJobs {
+		if _, ok := pipeline.Jobs[expectedName]; !ok {
+			t.Errorf("Expected expanded job %q to exist", expectedName)
+		}
+	}
+}
+
 func TestParseYAML_InvalidYAML(t *testing.T) {
 	_, err := ParseYAML("not: valid: yaml: at: all: {{{")
 	if err == nil {

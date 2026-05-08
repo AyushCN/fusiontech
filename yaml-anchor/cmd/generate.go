@@ -1,17 +1,18 @@
 package cmd
 
 import (
-	"fmt"
-	"log"
 	"os"
 
 	"github.com/spf13/cobra"
 	"yaml-anchor/pkg/config"
 	"yaml-anchor/pkg/generator"
+	"yaml-anchor/pkg/logger"
 )
 
-var generateConfigPath string
-var generateOutputPath string
+var (
+	generateOutputPath string
+	generateDryRun     bool
+)
 
 var generateCmd = &cobra.Command{
 	Use:   "generate",
@@ -20,39 +21,50 @@ var generateCmd = &cobra.Command{
 validates it, scans for secrets, and writes a GitHub Actions
 workflow file to .github/workflows/main.yml.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Printf("📖 Loading pipeline from %s...\n", generateConfigPath)
+		logger.Info("📖 Loading pipeline from %s...", globalConfigPath)
 
-		pipeline, err := config.Load(generateConfigPath)
+		pipeline, err := config.Load(globalConfigPath)
 		if err != nil {
-			log.Fatalf("❌ Failed to load config: %v", err)
+			logger.Error("❌ Failed to load config: %v\nSuggestion: Check if the file exists and is valid YAML.", err)
+			os.Exit(1)
 		}
 
-		fmt.Printf("🔍 Validating pipeline: %q...\n", pipeline.Name)
+		logger.Info("🔍 Validating pipeline: %q...", pipeline.Name)
 
 		// Validate
 		validationErrors := generator.ValidatePipeline(pipeline)
 		if len(validationErrors) > 0 {
-			fmt.Println("❌ Validation errors:")
+			logger.Error("❌ Validation errors found in pipeline")
 			for _, e := range validationErrors {
-				fmt.Printf("   - %s\n", e)
+				logger.Error("   - %s", e.Error())
 			}
 			os.Exit(1)
 		}
 
-		fmt.Printf("✨ Generating YAML...\n")
+		logger.Debug("Validation passed.")
 
-		if err := generator.ExportYAML(pipeline, generateOutputPath); err != nil {
-			log.Fatalf("❌ Error generating YAML: %v", err)
+		if generateDryRun {
+			logger.Info("✅ Dry-run successful! Pipeline is valid and free of CRITICAL secrets.")
+			logger.Info("Skipping YAML generation because --dry-run is enabled.")
+			return
 		}
 
-		fmt.Printf("✅ Successfully generated workflow at %s\n", generateOutputPath)
+		logger.Info("✨ Generating YAML...")
+
+		if err := generator.ExportYAML(pipeline, generateOutputPath); err != nil {
+			logger.Error("❌ Error generating YAML: %v", err)
+			os.Exit(1)
+		}
+
+		logger.Info("✅ Successfully generated workflow at %s", generateOutputPath)
 	},
 }
 
 func init() {
-	generateCmd.Flags().StringVarP(&generateConfigPath, "config", "c", "anchor.yaml",
-		"Path to your anchor.yaml pipeline definition")
 	generateCmd.Flags().StringVarP(&generateOutputPath, "output", "o", ".github/workflows/main.yml",
 		"Output path for generated workflow file")
+	generateCmd.Flags().BoolVar(&generateDryRun, "dry-run", false,
+		"Validate pipeline without writing any files to disk")
+	
 	rootCmd.AddCommand(generateCmd)
 }
