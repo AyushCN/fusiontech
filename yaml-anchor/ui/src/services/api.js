@@ -35,11 +35,18 @@ export const api = {
     return parseJsonResponse(response, 'Analyze');
   },
 
-  async generatePipeline(code, fileType = 'go') {
+  async generatePipeline(code, fileType = 'go', context = {}) {
     const response = await fetch(`${API_BASE_URL}/api/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code, prompt: code, file_type: fileType }),
+      body: JSON.stringify({
+        code,
+        prompt: code,
+        file_type: fileType,
+        project_tree: context.projectTree || context.project_tree,
+        context_files: context.contextFiles || context.context_files,
+        existing_ci: context.existingCI || context.existing_ci,
+      }),
     });
     return parseJsonResponse(response, 'Generate');
   },
@@ -54,5 +61,5 @@ export const api = {
   },
 };
 
-export const generatePipeline = (input) => api.generatePipeline(input);
+export const generatePipeline = (input, context) => api.generatePipeline(input, undefined, context);
 export const checkHealth = () => api.checkHealth();

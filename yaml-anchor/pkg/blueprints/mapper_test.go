@@ -17,8 +17,8 @@ func TestMapToYAML_GoStack(t *testing.T) {
 	if !strings.Contains(result, `name: "go Pipeline"`) {
 		t.Errorf("Expected Go pipeline name, got:\n%s", result)
 	}
-	if !strings.Contains(result, `blueprint: "go-app"`) {
-		t.Errorf("Expected go-app blueprint, got:\n%s", result)
+	if !strings.Contains(result, `backend-test:`) || !strings.Contains(result, `go test ./...`) {
+		t.Errorf("Expected Go backend test job, got:\n%s", result)
 	}
 	if !strings.Contains(result, "# Detected version: 1.21") {
 		t.Errorf("Expected version comment, got:\n%s", result)
@@ -36,8 +36,8 @@ func TestMapToYAML_NodeStack(t *testing.T) {
 	if !strings.Contains(result, `name: "node Pipeline"`) {
 		t.Errorf("Expected Node pipeline name, got:\n%s", result)
 	}
-	if !strings.Contains(result, `blueprint: "node-app"`) {
-		t.Errorf("Expected node-app blueprint, got:\n%s", result)
+	if !strings.Contains(result, `frontend-build:`) || !strings.Contains(result, `npm run build`) {
+		t.Errorf("Expected Node frontend build job, got:\n%s", result)
 	}
 	if !strings.Contains(result, "# Detected framework: next") {
 		t.Errorf("Expected framework comment, got:\n%s", result)

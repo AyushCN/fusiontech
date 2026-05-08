@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"yaml-anchor/pkg/blueprints"
 	"yaml-anchor/pkg/detector"
@@ -29,7 +30,14 @@ and generates a recommended anchor.yaml configuration.`,
 			os.Exit(1)
 		}
 
-		fmt.Printf("⚓ Detected stack: %s\n", profile.Stack)
+		if len(profile.Stacks) > 0 {
+			fmt.Printf("⚓ Detected stacks: %s\n", strings.Join(profile.Stacks, ", "))
+		} else {
+			fmt.Println("⚓ Detected stack: unknown")
+		}
+		if profile.HasDocker {
+			fmt.Println("🐳 Dockerfile detected; adding docker-build job")
+		}
 		if profile.HasExistingCI {
 			fmt.Println("⚠️  Note: Existing GitHub Actions detected in .github/workflows/")
 		}

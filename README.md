@@ -15,9 +15,9 @@
 
 ---
 
-> **The problem**: CI/CD pipelines are written in YAML — a format with no types, no compile-time checks, and no local execution. Errors are discovered only after a remote push. YamlAnchor fixes this.
+> **The problem**: CI/CD pipelines are written in YAML — a format with no types, weak local feedback, and late failure signals. Errors are often discovered only after a remote push. YamlAnchor gives you a safer preflight path.
 
-YamlAnchor defines your pipeline in **Go structs**, validates it at load-time, simulates it locally in **Docker via Dagger**, and exports a valid `.github/workflows/main.yml`. No more "push → wait → fail → cry."
+YamlAnchor loads an `anchor.yaml` pipeline into a typed Go model, validates dependencies and step structure, scans for secrets, can simulate common shell steps locally with Docker/Dagger, and exports CI configuration. No more "push → wait → fail → cry."
 
 ---
 
@@ -25,13 +25,13 @@ YamlAnchor defines your pipeline in **Go structs**, validates it at load-time, s
 
 | Traditional CI/CD | YamlAnchor |
 |:---|:---|
-| ❌ Errors found after a remote push | ✅ Caught at load-time with typed validation |
+| ❌ Errors found after a remote push | ✅ Caught earlier with typed validation |
 | ❌ No circular dependency detection | ✅ Compile-time DAG cycle detection |
 | ❌ Boilerplate steps repeated everywhere | ✅ **Blueprints** auto-expand common stacks |
-| ❌ `uses:` actions skipped locally | ✅ **Action Shims** simulate them in Dagger |
+| ❌ Local CI feedback is hard | ✅ **Dagger simulation** runs common steps locally |
 | ❌ Blind log scrolling | ✅ **Pulse Dashboard** (Bubbletea TUI) |
 | ❌ Hardcoded secrets committed accidentally | ✅ **Secret Scanner** blocks export on `HIGH`/`CRITICAL` |
-| ❌ No financial insight on CI usage | ✅ **Telemetry** reports minutes and cost saved |
+| ❌ CI config is hard to inspect visually | ✅ **Studio UI** generates, previews, and graphs pipelines |
 
 ---
 
@@ -44,11 +44,13 @@ A live Bubbletea terminal dashboard replaces raw log scrolling. Real-time job pr
 Write less boilerplate. A single `blueprint: "go-app"` line expands into a fully-configured checkout → setup → build → test pipeline. Supported: `go-app`, `node-app`.
 
 ### 🛡️ Action Shims & Local Simulation
-YamlAnchor doesn't skip GitHub Actions — it *simulates* them inside Dagger containers:
+YamlAnchor simulates common workflow behavior inside Dagger containers:
 - `actions/checkout` → mounts your local workspace
-- `actions/setup-go` → resolves the correct Go image from `go.mod`
-- `actions/setup-node` → resolves the Node image from `package.json`
+- `actions/setup-go` → uses a Go-capable base image
+- `actions/setup-node` → uses a Node-capable base image
 - Custom shims via `.anchor/plugins/<owner>/<action>.sh`
+
+Local simulation is intentionally approximate: it is a preflight sanity check, not a perfect replacement for GitHub-hosted runners, macOS/Windows runners, marketplace action internals, cloud permissions, artifacts, or deployment environments.
 
 ### 🔗 DAG Validation
 Builds a mathematical Directed Acyclic Graph of your `needs:` dependencies. Detects circular dependencies and invalid references at load-time, before a single container starts.
@@ -70,10 +72,15 @@ The `strategy.matrix` block supports any number of dimensions. Keys are sorted f
 Every local run generates a telemetry report with actual vs. estimated remote CI time and dollar savings based on GitHub runner pricing ($0.008/minute).
 
 ### 🎨 YamlAnchor Studio
-A glassmorphic React/Vite web UI with:
-- **AI Generator** — describe your stack, get an `anchor.yaml`
-- **Visual Flowchart** — SVG job dependency graph with fault detection
-- **YAML Preview** — live synchronized output
+A React/Vite workbench for building and inspecting pipelines:
+- **Pipeline Intake** — describe your stack or paste config/code
+- **Keyless generation** — calls `anchor server` at `/api/generate`
+- **Local LLM optional** — uses Ollama on your machine when available
+- **Offline fallback** — deterministic generator when no model is running
+- **anchor.yaml Preview** — synchronized YAML with copy/download actions
+- **Flow Trace** — SVG job/step graph with inline fault hints
+
+No API key is required. The generator first tries a local Ollama model (`llama3.2` by default) and falls back to an in-process generator for Go, Node/React, Python, Docker, deploy, and mixed-stack prompts.
 
 ---
 
@@ -118,7 +125,7 @@ sudo mv anchor /usr/local/bin/
 ```bash
 anchor init
 ```
-Auto-detects your stack (Go, Node, Python, Rust) and writes `anchor.yaml`.
+Auto-detects your stack and writes `anchor.yaml`. It scans project context such as `package.json`, `go.mod`, `Dockerfile`, `requirements.txt`, `pyproject.toml`, existing `.github/workflows`, and a lightweight project tree. Mixed projects such as Go + React + Docker produce multiple jobs.
 
 **2. Validate without writing:**
 ```bash
@@ -139,6 +146,55 @@ anchor local
 **5. Scan for secrets:**
 ```bash
 anchor scan ./
+```
+
+**6. Run YamlAnchor Studio:**
+```bash
+# Terminal 1: backend API
+cd yaml-anchor
+go run main.go server
+
+# Terminal 2: React UI
+cd yaml-anchor/ui
+npm install
+npm run dev
+```
+
+Open the Vite URL printed in the terminal, usually `http://localhost:5173/`. The UI proxies `/api` and `/health` to the Go backend on port `8080`.
+
+**Optional: use a local LLM with no API key**
+```bash
+# Install/run Ollama separately, then pull a model:
+ollama pull llama3.2
+
+# Start YamlAnchor normally:
+cd yaml-anchor
+go run main.go server
+```
+
+YamlAnchor will call `http://localhost:11434/api/generate` automatically. You can change the model or disable local LLM attempts:
+
+```bash
+YAML_ANCHOR_MODEL=mistral go run main.go server
+YAML_ANCHOR_LLM=off go run main.go server
+```
+
+**Generate with project context over the API**
+```bash
+curl -X POST http://localhost:8080/api/generate \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "prompt": "Generate CI for this repo",
+    "project_tree": ["go.mod", "ui/package.json", "Dockerfile"],
+    "context_files": {
+      "go.mod": "module example.com/app\n\ngo 1.22\n",
+      "ui/package.json": "{\"scripts\":{\"lint\":\"eslint .\",\"test\":\"vitest\",\"build\":\"vite build\"},\"dependencies\":{\"react\":\"latest\"}}",
+      "Dockerfile": "FROM node:20"
+    },
+    "existing_ci": {
+      ".github/workflows/ci.yml": "name: old-ci"
+    }
+  }'
 ```
 
 ---
@@ -256,10 +312,14 @@ fusiontech/
 ## 🧪 Development
 
 ```bash
+# From the repository root, go.work points at ./yaml-anchor
+go test ./yaml-anchor/...
+
 # Run all tests
 make test-go
 
 # Run with race detector
+cd yaml-anchor
 go test -race ./pkg/...
 
 # Build binary
@@ -270,6 +330,11 @@ make coverage
 
 # Lint
 make lint
+
+# UI checks
+cd yaml-anchor/ui
+npm run lint
+npm run build
 ```
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the full contribution guide.
@@ -290,13 +355,13 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the full contribution guide.
 - [x] Interactive debug shell (`anchor exec`)
 - [x] Action plugin system (`.anchor/plugins/`)
 - [x] Telemetry & cost dashboard
-- [x] Pattern-based LLM debugger (`pkg/debugger`)
+- [x] Pattern-based debugger (`pkg/debugger`)
 - [x] YamlAnchor Studio (React/Vite)
 - [x] REST API server
 - [x] VS Code extension scaffold
 - [x] GoReleaser multi-platform binary releases
 - [x] GitHub Actions CI pipeline
-- [ ] GitLab CI export
+- [x] GitLab CI export
 - [ ] Bitbucket Pipelines export
 - [ ] LLM-powered intelligent fix suggestions
 
