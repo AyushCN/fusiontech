@@ -19,6 +19,8 @@
 
 YamlAnchor loads an `anchor.yaml` pipeline into a typed Go model, validates dependencies and step structure, scans for secrets, can simulate common shell steps locally with Docker/Dagger, and exports CI configuration. No more "push → wait → fail → cry."
 
+The newer direction is an auto-fixing loop: generate or write `anchor.yaml`, validate it, run it locally, capture the failure, rewrite the YAML, and repeat until the pipeline passes or the iteration limit is reached.
+
 ---
 
 ## ✨ Why YamlAnchor?
@@ -29,6 +31,7 @@ YamlAnchor loads an `anchor.yaml` pipeline into a typed Go model, validates depe
 | ❌ No circular dependency detection | ✅ Compile-time DAG cycle detection |
 | ❌ Boilerplate steps repeated everywhere | ✅ **Blueprints** auto-expand common stacks |
 | ❌ Local CI feedback is hard | ✅ **Dagger simulation** runs common steps locally |
+| ❌ Failed YAML stays manual | ✅ **Auto-improve loop** rewrites broken `anchor.yaml` |
 | ❌ Blind log scrolling | ✅ **Pulse Dashboard** (Bubbletea TUI) |
 | ❌ Hardcoded secrets committed accidentally | ✅ **Secret Scanner** blocks export on `HIGH`/`CRITICAL` |
 | ❌ CI config is hard to inspect visually | ✅ **Studio UI** generates, previews, and graphs pipelines |
@@ -51,6 +54,9 @@ YamlAnchor simulates common workflow behavior inside Dagger containers:
 - Custom shims via `.anchor/plugins/<owner>/<action>.sh`
 
 Local simulation is intentionally approximate: it is a preflight sanity check, not a perfect replacement for GitHub-hosted runners, macOS/Windows runners, marketplace action internals, cloud permissions, artifacts, or deployment environments.
+
+### 🔄 Auto-Improve Loop
+`anchor improve` turns validation and local simulation failures into the next YAML draft. It reads `anchor.yaml`, validates the DAG and schema, runs the local simulator, captures logs in a machine-readable form, and asks the keyless generator to rewrite the pipeline. It uses local Ollama when available and falls back to the built-in offline generator, so no API key is required.
 
 ### 🔗 DAG Validation
 Builds a mathematical Directed Acyclic Graph of your `needs:` dependencies. Detects circular dependencies and invalid references at load-time, before a single container starts.
@@ -143,12 +149,24 @@ anchor generate
 anchor local
 ```
 
-**5. Scan for secrets:**
+**5. Auto-fix until it validates and runs:**
+```bash
+anchor improve --max-iterations 5
+```
+
+Before each rewrite, YamlAnchor stores the previous file at `anchor.yaml.bak`.
+
+For validation-only improvement without running containers:
+```bash
+anchor improve --skip-run
+```
+
+**6. Scan for secrets:**
 ```bash
 anchor scan ./
 ```
 
-**6. Run YamlAnchor Studio:**
+**7. Run YamlAnchor Studio:**
 ```bash
 # Terminal 1: backend API
 cd yaml-anchor
@@ -207,6 +225,8 @@ curl -X POST http://localhost:8080/api/generate \
 | `anchor generate` | Validate + scan + export `.github/workflows/main.yml` |
 | `anchor generate --dry-run` | Validate only — no files written |
 | `anchor local` | Run pipeline in Dagger with live Pulse TUI |
+| `anchor simulate` | Run pipeline with plain CLI progress output |
+| `anchor improve` | Validate, run, and rewrite `anchor.yaml` until it passes or reaches the iteration limit |
 | `anchor exec <job>` | Drop into an interactive shell inside the runner container |
 | `anchor scan <path>` | Scan files for hardcoded secrets |
 | `anchor server` | Start the REST API server (for Studio UI) |
@@ -272,6 +292,7 @@ fusiontech/
 │   ├── cmd/                    # CLI commands (Cobra)
 │   │   ├── root.go             # Global --config, --verbose flags
 │   │   ├── generate.go         # Export + secret blocking + --dry-run
+│   │   ├── improve.go          # Validation/run/fix loop for anchor.yaml
 │   │   ├── local.go            # Dagger + TUI integration
 │   │   ├── scan.go             # Standalone scanner + git hooks
 │   │   ├── server.go           # REST API server
@@ -286,6 +307,7 @@ fusiontech/
 │   │   ├── detector/           # Stack detection (go.mod, package.json)
 │   │   ├── analyzer/           # Code analysis for Studio AI
 │   │   ├── generator/          # YAML export + secret scanning
+│   │   ├── improver/           # Keyless YAML auto-fix layer
 │   │   ├── scanner/            # Multi-pattern + entropy secret scanner
 │   │   ├── debugger/           # Pattern-based error analysis
 │   │   ├── simulator/          # Dagger engine + action shims
@@ -356,6 +378,7 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the full contribution guide.
 - [x] Action plugin system (`.anchor/plugins/`)
 - [x] Telemetry & cost dashboard
 - [x] Pattern-based debugger (`pkg/debugger`)
+- [x] Keyless YAML auto-improvement loop (`anchor improve`)
 - [x] YamlAnchor Studio (React/Vite)
 - [x] REST API server
 - [x] VS Code extension scaffold
@@ -363,7 +386,7 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the full contribution guide.
 - [x] GitHub Actions CI pipeline
 - [x] GitLab CI export
 - [ ] Bitbucket Pipelines export
-- [ ] LLM-powered intelligent fix suggestions
+- [ ] Richer failure-to-fix strategies for deploy/cloud/provider errors
 
 ---
 

@@ -243,3 +243,13 @@ func TestValidateDAG_LinearDependency(t *testing.T) {
 		t.Errorf("Expected valid DAG, got error: %v", err)
 	}
 }
+
+func TestValidateDAG_MissingDependency(t *testing.T) {
+	jobs := map[string]*Job{
+		"deploy": {RunsOn: "ubuntu-latest", Needs: []string{"build"}, Steps: []*Step{{Run: "echo deploy"}}},
+	}
+	p := &Pipeline{Name: "Missing dependency", Jobs: jobs}
+	if err := p.Validate(); err == nil {
+		t.Error("Expected missing dependency error")
+	}
+}
